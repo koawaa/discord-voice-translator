@@ -32,6 +32,23 @@ internal static class NativeWindow
     public static void KeepOnTop(IntPtr hwnd) =>
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_CAPTION_COLOR = 35;
+
+    /// <summary>
+    /// Barre de titre sombre (Windows 10 20H1+), et de la couleur donnée sous Windows 11.
+    /// Sans effet sur les versions plus anciennes : la fenêtre garde sa barre claire.
+    /// </summary>
+    public static void UseDarkTitleBar(IntPtr hwnd, System.Windows.Media.Color caption)
+    {
+        int dark = 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        int colorRef = caption.R | caption.G << 8 | caption.B << 16;
+        DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref colorRef, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
 

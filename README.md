@@ -83,7 +83,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.0.1
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.1.0
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -171,7 +171,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.0.1
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.1.0
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Navigation;
 using System.Windows.Threading;
@@ -60,8 +61,7 @@ public partial class SettingsWindow : Window
                 Content = T(english, french),
                 Tag = code,
                 IsChecked = settings.Transcription.AllowedLanguages.Contains(code),
-                Width = 120,
-                Margin = new Thickness(0, 4, 8, 0),
+                Style = (Style)FindResource("Chip"),
             });
         }
         SilenceSlider.Value = settings.Transcription.EndOfSentenceSilenceMs;
@@ -82,6 +82,10 @@ public partial class SettingsWindow : Window
         _statusTimer.Start();
         Closed += (_, _) => _statusTimer.Stop();
     }
+
+    // Barre de titre sombre, assortie au reste de la fenêtre.
+    private void Window_SourceInitialized(object? sender, EventArgs e) =>
+        Interop.NativeWindow.UseDarkTitleBar(new WindowInteropHelper(this).Handle, ((SolidColorBrush)FindResource("SidebarBrush")).Color);
 
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
@@ -184,14 +188,15 @@ public partial class SettingsWindow : Window
         string? key = Typed(DeepLKeyBox.Password) ?? _storedDeepLKey;
         if (key is null)
         {
+            DeepLResult.Foreground = ThemeBrush("DangerBrush");
             DeepLResult.Text = T("Paste a key first.", "Colle d'abord une clé.");
             return;
         }
         CheckKeyButton.IsEnabled = false;
-        DeepLResult.Foreground = Brushes.DimGray;
+        DeepLResult.Foreground = ThemeBrush("TextMutedBrush");
         DeepLResult.Text = T("Checking...", "Vérification...");
         var (ok, message) = await CheckDeepLKeyAsync(key);
-        DeepLResult.Foreground = ok ? Brushes.SeaGreen : Brushes.Firebrick;
+        DeepLResult.Foreground = ThemeBrush(ok ? "SuccessBrush" : "DangerBrush");
         DeepLResult.Text = message;
         CheckKeyButton.IsEnabled = true;
     }
@@ -233,15 +238,17 @@ public partial class SettingsWindow : Window
     private void Fail(TabItem tab, string message)
     {
         Tabs.SelectedItem = tab;
-        ErrorText.Foreground = Brushes.Firebrick;
+        ErrorText.Foreground = ThemeBrush("DangerBrush");
         ErrorText.Text = message;
     }
 
     private void ShowInfo(string message)
     {
-        ErrorText.Foreground = Brushes.DimGray;
+        ErrorText.Foreground = ThemeBrush("TextMutedBrush");
         ErrorText.Text = message;
     }
+
+    private Brush ThemeBrush(string key) => (Brush)FindResource(key);
 
     private static string? Typed(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

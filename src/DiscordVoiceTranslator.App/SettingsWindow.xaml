@@ -708,6 +708,110 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- Sources audio -->
+            <TabItem x:Name="AudioTab" Header="Audio" Tag="&#xE767;">
+                <ScrollViewer Style="{StaticResource Page}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{local:Tr En='Audio sources', Fr='Sources audio'}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <TextBlock Style="{StaticResource Body}"
+                                       Text="{local:Tr En='Choose whose voices get subtitles. Only the sound of these apps is listened to, never your microphone or the rest of the PC.', Fr='Choisis de quelles applis les voix sont sous-titrées. Seul le son de ces applis est écouté, jamais ton micro ni le reste du PC.'}" />
+                        </Border>
+
+                        <TextBlock Style="{StaticResource Section}" Text="DISCORD" />
+                        <Border Style="{StaticResource Card}">
+                            <CheckBox x:Name="CaptureDiscordBox">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Label}" Text="{local:Tr En='Subtitle Discord', Fr='Sous-titrer Discord'}" />
+                                    <TextBlock Style="{StaticResource Hint}"
+                                               Text="{local:Tr En='Voice channels and calls, with names and avatars (Discord tab).', Fr='Salons vocaux et appels, avec pseudos et avatars (onglet Discord).'}" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource Section}" Text="{local:Tr En='GAMES AND OTHER APPS', Fr='JEUX ET AUTRES APPLIS'}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Body}"
+                                           Text="{local:Tr En='Add a game with voice chat (CS2, War Dogs...) or any app that plays voices. Its lines are labelled with its name.', Fr='Ajoute un jeu avec un chat vocal (CS2, War Dogs...) ou n’importe quelle appli qui diffuse des voix. Ses lignes portent son nom.'}" />
+
+                                <ItemsControl x:Name="AppsList" Margin="0,12,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource InputBrush}" CornerRadius="6" Padding="12,8,8,8" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Width="28" Height="28" CornerRadius="6" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Center">
+                                                        <TextBlock Text="&#xE7FC;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AccentBrush}" FontSize="14"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding ExeName}" Foreground="{StaticResource TextMutedBrush}" FontSize="12" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="2" Padding="9" Background="Transparent" VerticalAlignment="Center"
+                                                            Click="RemoveApp_Click" ToolTip="{local:Tr En='Stop subtitling this app', Fr='Ne plus sous-titrer cette appli'}">
+                                                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="13" />
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="NoAppsText" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                           Text="{local:Tr En='No other app yet.', Fr='Aucune autre appli pour l’instant.'}" />
+
+                                <TextBlock Style="{StaticResource Label}" Margin="0,10,0,8" Text="{local:Tr En='Add an open app', Fr='Ajouter une appli ouverte'}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="RunningAppsBox">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock TextTrimming="CharacterEllipsis">
+                                                    <Run Text="{Binding Title, Mode=OneWay}" />
+                                                    <Run Text="{Binding ExeName, Mode=OneWay, StringFormat='  ·  {0}'}" Foreground="{StaticResource TextMutedBrush}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button x:Name="RefreshAppsButton" Grid.Column="1" Margin="8,0,0,0" Padding="11,0" Click="RefreshApps_Click"
+                                            ToolTip="{local:Tr En='Refresh the list', Fr='Actualiser la liste'}">
+                                        <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                    </Button>
+                                    <Button Grid.Column="2" Margin="8,0,0,0" Click="AddApp_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <TextBlock Text="{local:Tr En='Add', Fr='Ajouter'}" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="{local:Tr En='Launch the game first so it shows up here. Next time, it is found again on its own, even if it starts after this app.', Fr='Lance d’abord le jeu pour qu’il apparaisse ici. Ensuite, il est retrouvé tout seul, même s’il démarre après cette appli.'}" />
+                                <TextBlock x:Name="AppsResult" Style="{StaticResource Hint}" Foreground="{StaticResource DangerBrush}" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border CornerRadius="8" Padding="14,10" Background="{StaticResource AccentSoftBrush}">
+                            <DockPanel>
+                                <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="15" Foreground="{StaticResource AccentBrush}"
+                                           VerticalAlignment="Top" Margin="0,2,10,0" />
+                                <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                                           Text="{local:Tr En='The whole sound of a game is listened to: music or songs with lyrics can give false lines. Each extra app also asks a little more of the PC.', Fr='Tout le son d’un jeu est écouté : une musique ou des chansons avec paroles peuvent donner de fausses lignes. Chaque appli en plus demande aussi un peu plus au PC.'}" />
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Overlay -->
             <TabItem Header="Overlay" Tag="&#xE7F4;">
                 <ScrollViewer Style="{StaticResource Page}">

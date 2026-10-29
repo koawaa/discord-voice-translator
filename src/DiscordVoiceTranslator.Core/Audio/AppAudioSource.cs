@@ -4,31 +4,40 @@ using static DiscordVoiceTranslator.Core.Localization.UiText;
 namespace DiscordVoiceTranslator.Core.Audio;
 
 /// <summary>
-/// Source audio « Discord seul » qui se gère toute seule : attend que Discord soit lancé,
-/// capte son arborescence de processus, et se reconnecte si Discord est fermé ou redémarre
-/// (mise à jour, crash).
+/// Source audio « une seule appli » (Discord, un jeu...) qui se gère toute seule : attend
+/// que l'appli soit lancée, capte son arborescence de processus, et se reconnecte si elle
+/// est fermée ou redémarre (mise à jour, crash, nouvelle partie).
 /// </summary>
-public sealed class DiscordAudioSource : IDisposable
+public sealed class AppAudioSource : IDisposable
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
 
+    private readonly string _name;
+    private readonly string[] _exeNames;
     private readonly ManualResetEventSlim _stopRequested = new(false);
     private readonly Downsampler48kTo16kMono _downsampler = new();
     private Thread? _supervisor;
     private string? _lastStatus;
-
-    /// <summary>Flux brut : 48 kHz stéréo entrelacé.</summary>
-    public event AudioDataHandler? RawData;
 
     /// <summary>Flux pour la reconnaissance vocale : 16 kHz mono.</summary>
     public event AudioDataHandler? Data16kMono;
 
     public event Action<string>? StatusChanged;
 
+    /// <param name="name">Nom affiché (« Discord », « War Dogs »...).</param>
+    /// <param name="exeNames">Exécutables acceptés, par ordre de préférence.</param>
+    public AppAudioSource(string name, IReadOnlyList<string> exeNames)
+    {
+        _name = name;
+        _exeNames = exeNames.ToArray();
+    }
+
+    public static AppAudioSource Discord() => new("Discord", ProcessLocator.DiscordExeNames);
+
     public void Start()
     {
         _stopRequested.Reset();
-        _supervisor = new Thread(Supervise) { IsBackground = true, Name = "Discord audio supervisor" };
+        _supervisor = new Thread(Supervise) { IsBackground = true, Name = $"{_name} audio supervisor" };
         _supervisor.Start();
     }
 
@@ -49,20 +58,20 @@ public sealed class DiscordAudioSource : IDisposable
     {
         while (!_stopRequested.IsSet)
         {
-            var discord = DiscordProcessLocator.FindRoot();
-            if (discord is null)
+            var app = ProcessLocator.FindRoot(_exeNames);
+            if (app is null)
             {
-                Report(T("Audio: Discord is not running, waiting...", "Audio : Discord n'est pas lancé, en attente..."));
+                Report(T($"Audio {_name}: not running, waiting...", $"Audio {_name} : pas lancé, en attente..."));
                 _stopRequested.Wait(RetryDelay);
                 continue;
             }
 
             Process process;
-            try { process = Process.GetProcessById(discord.ProcessId); }
+            try { process = Process.GetProcessById(app.ProcessId); }
             catch (ArgumentException) { continue; } // fermé entre-temps
 
             using (process)
-            using (var capture = new ProcessLoopbackCapture((uint)discord.ProcessId))
+            using (var capture = new ProcessLoopbackCapture((uint)app.ProcessId))
             {
                 Exception? fault = null;
                 capture.DataAvailable += OnRawData;
@@ -75,28 +84,27 @@ public sealed class DiscordAudioSource : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Report(T($"Audio: capture failed to start: {ex.Message}", $"Audio : échec du démarrage de la capture : {ex.Message}"));
+                    Report(T($"Audio {_name}: capture failed to start: {ex.Message}", $"Audio {_name} : échec du démarrage de la capture : {ex.Message}"));
                     _stopRequested.Wait(RetryDelay);
                     continue;
                 }
 
-                Report(T($"Audio: capturing {discord.ExeName} (PID {discord.ProcessId}) and its child processes",
-                         $"Audio : capture de {discord.ExeName} (PID {discord.ProcessId}) et de ses sous-processus"));
+                Report(T($"Audio {_name}: capturing {app.ExeName} (PID {app.ProcessId}) and its child processes",
+                         $"Audio {_name} : capture de {app.ExeName} (PID {app.ProcessId}) et de ses sous-processus"));
 
                 while (!_stopRequested.IsSet && fault is null && !process.HasExited)
                     _stopRequested.Wait(500);
 
                 if (fault is not null)
-                    Report(T($"Audio: capture interrupted: {fault.Message}", $"Audio : capture interrompue : {fault.Message}"));
+                    Report(T($"Audio {_name}: capture interrupted: {fault.Message}", $"Audio {_name} : capture interrompue : {fault.Message}"));
                 else if (process.HasExited)
-                    Report(T("Audio: Discord was closed", "Audio : Discord s'est fermé"));
+                    Report(T($"Audio {_name}: closed", $"Audio {_name} : fermé"));
             }
         }
     }
 
     private void OnRawData(ReadOnlySpan<float> stereo, long qpc)
     {
-        RawData?.Invoke(stereo, qpc);
         var mono = _downsampler.Process(stereo);
         if (mono.Length > 0)
             Data16kMono?.Invoke(mono, qpc);

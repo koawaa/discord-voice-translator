@@ -16,18 +16,19 @@ using static DiscordVoiceTranslator.Core.Localization.UiText;
 namespace DiscordVoiceTranslator.App;
 
 /// <summary>
-/// Ce que l'overlay affiche : qui a parlé (vide si inconnu), le texte principal, et
-/// l'original s'il a été traduit.
+/// Ce que l'overlay affiche : qui a parlé (vide si inconnu), le texte principal, l'original
+/// s'il a été traduit, et l'appli d'où vient la voix si ce n'est pas Discord.
 /// </summary>
 internal sealed record DisplayLine(
     TranscriptionResult Transcription,
     IReadOnlyList<VoiceMember> Speakers,
     string Text,
-    string? Original);
+    string? Original,
+    string? OtherApp);
 
 /// <summary>
-/// Capture Discord → VAD → Whisper → traduction. Tout tourne hors du thread de l'interface ;
-/// les événements arrivent sur des threads de fond (à renvoyer vers le Dispatcher).
+/// Capture (Discord et d'autres applis) → VAD → Whisper → traduction. Tout tourne hors du
+/// thread de l'interface ; les événements arrivent sur des threads de fond (à renvoyer vers le Dispatcher).
 /// </summary>
 internal sealed class TranslatorEngine : IAsyncDisposable
 {
@@ -36,23 +37,49 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     private sealed record TranslationConfig(ITranslator? Translator, TargetLanguage Target, string? DisabledReason);
 
+    /// <summary>
+    /// Une appli captée : sa propre détection de parole (Silero garde un état par flux), mais
+    /// un seul Whisper partagé, qui traite les phrases l'une après l'autre.
+    /// </summary>
+    private sealed class AudioChannel(string name, bool isDiscord, AppAudioSource source, SileroVad vad, TranscriptionPipeline pipeline)
+    {
+        public string Name => name;
+        public bool IsDiscord => isDiscord;
+        public AppAudioSource Source => source;
+        public TranscriptionPipeline Pipeline => pipeline;
+        public volatile bool Speaking;
+        public volatile string Status = "";
+
+        public void Start()
+        {
+            pipeline.Start();
+            source.Start();
+        }
+
+        public async Task DisposeAsync()
+        {
+            source.Dispose();
+            await pipeline.DisposeAsync();
+            vad.Dispose();
+        }
+    }
+
     private readonly TranscriptionSettings _transcription;
     private readonly Queue<double> _recentLatencies = new();
-    private readonly Channel<TranscriptionResult> _toTranslate =
-        Channel.CreateUnbounded<TranscriptionResult>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<(TranscriptionResult Result, AudioChannel Channel)> _toTranslate =
+        Channel.CreateUnbounded<(TranscriptionResult, AudioChannel)>(new UnboundedChannelOptions { SingleReader = true });
     private readonly CancellationTokenSource _cts = new();
-    private DiscordAudioSource? _source;
-    private SileroVad? _vad;
+    private string _vadPath = "";
     private WhisperTranscriber? _transcriber;
-    private TranscriptionPipeline? _pipeline;
+    private (bool Discord, IReadOnlyList<CapturedApp> Apps) _audioConfig = (true, []);
+    private IReadOnlyList<AudioChannel> _channels = [];
     private Task? _translationTask;
     private TranslationConfig _translation = new(null, TargetLanguage.All[0], null);
     private DiscordVoiceService? _voice;
-    private string _engineStatus = "", _translationStatus = "", _speakersStatus = "", _captureStatus = "";
+    private string _engineStatus = "", _translationStatus = "", _speakersStatus = "";
     private TranslatorUsage? _usage;
     private double? _lastTranslationMs;
     private int _linesSinceUsage;
-    private volatile bool _speaking;
     private int _translating;
 
     public event Action<string>? StatusChanged;
@@ -71,19 +98,20 @@ internal sealed class TranslatorEngine : IAsyncDisposable
         await Task.Run(async () =>
         {
             // Silero (2 Mo) est livré avec l'appli ; à défaut (version de développement), dans le dossier des modèles.
-            string vadPath = Path.Combine(AppContext.BaseDirectory, "models", "silero_vad.onnx");
-            if (!File.Exists(vadPath))
-                vadPath = Path.Combine(ModelsDir, "silero_vad.onnx");
-            _vad = new SileroVad(vadPath);
+            _vadPath = Path.Combine(AppContext.BaseDirectory, "models", "silero_vad.onnx");
+            if (!File.Exists(_vadPath))
+                _vadPath = Path.Combine(ModelsDir, "silero_vad.onnx");
             try
             {
-                _transcriber = new WhisperTranscriber(new WhisperOptions
+                var transcriber = new WhisperTranscriber(new WhisperOptions
                 {
                     ModelPath = modelPath,
                     UseGpu = _transcription.UseGpu,
                     AllowedLanguages = _transcription.AllowedLanguages.Count > 0 ? _transcription.AllowedLanguages : ["en"],
                 });
-                await _transcriber.WarmUpAsync(CancellationToken.None);
+                await transcriber.WarmUpAsync(CancellationToken.None);
+                // Prêt seulement une fois le premier passage réussi : ConfigureAudio s'y fie.
+                _transcriber = transcriber;
             }
             catch (Exception ex)
             {
@@ -94,27 +122,64 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             }
         });
 
-        var vadOptions = new VadOptions { MinSilenceMs = _transcription.EndOfSentenceSilenceMs };
-        _pipeline = new TranscriptionPipeline(new SpeechSegmenter(_vad!, vadOptions), _transcriber!);
-        _pipeline.SpeechStarted += _ => { _speaking = true; RaiseBusy(); };
-        _pipeline.SpeechDiscarded += () => { _speaking = false; RaiseBusy(); };
-        _pipeline.SegmentQueued += segment => { if (!segment.CutAtMaxLength) _speaking = false; RaiseBusy(); };
-        _pipeline.SegmentProcessed += RaiseBusy;
-        _pipeline.Transcribed += result =>
+        _translationTask = Task.Run(TranslationLoop);
+        RebuildChannels();
+        UpdateEngineStatus();
+    }
+
+    /// <summary>
+    /// Choisit les applis à sous-titrer, à chaud. Avant la fin du chargement de Whisper, le
+    /// choix est seulement retenu et appliqué dès qu'il est prêt.
+    /// </summary>
+    public void ConfigureAudio(bool captureDiscord, IReadOnlyList<CapturedApp> apps)
+    {
+        _audioConfig = (captureDiscord, apps.ToList());
+        if (_transcriber is not null && !_cts.IsCancellationRequested)
+            RebuildChannels();
+    }
+
+    private void RebuildChannels()
+    {
+        var (discord, apps) = _audioConfig;
+        var channels = new List<AudioChannel>();
+        if (discord)
+            channels.Add(CreateChannel("Discord", isDiscord: true, AppAudioSource.Discord()));
+        foreach (var app in apps)
+            channels.Add(CreateChannel(app.Name, isDiscord: false, new AppAudioSource(app.Name, [app.ExeName])));
+
+        var previous = _channels;
+        Volatile.Write(ref _channels, channels);
+        foreach (var channel in channels)
+            channel.Start();
+        _ = Task.Run(async () =>
+        {
+            foreach (var channel in previous)
+                await channel.DisposeAsync();
+        });
+        PublishStatus();
+        RaiseBusy();
+    }
+
+    private AudioChannel CreateChannel(string name, bool isDiscord, AppAudioSource source)
+    {
+        var vad = new SileroVad(_vadPath);
+        var segmenter = new SpeechSegmenter(vad, new VadOptions { MinSilenceMs = _transcription.EndOfSentenceSilenceMs });
+        var pipeline = new TranscriptionPipeline(segmenter, _transcriber!);
+        var channel = new AudioChannel(name, isDiscord, source, vad, pipeline);
+
+        pipeline.SpeechStarted += _ => { channel.Speaking = true; RaiseBusy(); };
+        pipeline.SpeechDiscarded += () => { channel.Speaking = false; RaiseBusy(); };
+        pipeline.SegmentQueued += segment => { if (!segment.CutAtMaxLength) channel.Speaking = false; RaiseBusy(); };
+        pipeline.SegmentProcessed += RaiseBusy;
+        pipeline.Transcribed += result =>
         {
             Interlocked.Increment(ref _translating);
-            _toTranslate.Writer.TryWrite(result);
+            _toTranslate.Writer.TryWrite((result, channel));
         };
-        _pipeline.Error += ex => SetEngineStatus(T("Transcription error: ", "Erreur de transcription : ") + ex.Message);
-        _translationTask = Task.Run(TranslationLoop);
-        _pipeline.Start();
-
-        _source = new DiscordAudioSource();
-        _source.StatusChanged += status => { _captureStatus = status; PublishStatus(); };
-        _source.Data16kMono += _pipeline.PushAudio;
-        _source.Start();
-
-        UpdateEngineStatus();
+        pipeline.Error += ex => SetEngineStatus(T("Transcription error: ", "Erreur de transcription : ") + ex.Message);
+        source.StatusChanged += status => { channel.Status = status; PublishStatus(); };
+        source.Data16kMono += pipeline.PushAudio;
+        return channel;
     }
 
     /// <summary>
@@ -203,7 +268,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
         try
         {
             // Une phrase à la fois, dans l'ordre : les lignes ne peuvent pas s'afficher dans le désordre.
-            await foreach (var result in _toTranslate.Reader.ReadAllAsync(_cts.Token))
+            await foreach (var (result, channel) in _toTranslate.Reader.ReadAllAsync(_cts.Token))
             {
                 var config = Volatile.Read(ref _translation);
                 string text = result.Text;
@@ -231,9 +296,12 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                 Interlocked.Decrement(ref _translating);
 
                 // La parole seule (sans le pré-buffer), pour ne pas compter quelqu'un qui finissait juste avant.
-                var speakers = Volatile.Read(ref _voice)?.IdentifySpeakers(result.Segment.SpeechStartQpc, result.Segment.SpeechEndQpc) ?? [];
+                // Les pseudos ne valent que pour Discord : la voix d'un jeu n'y figure pas.
+                var speakers = channel.IsDiscord
+                    ? Volatile.Read(ref _voice)?.IdentifySpeakers(result.Segment.SpeechStartQpc, result.Segment.SpeechEndQpc) ?? []
+                    : [];
                 RecordLatency(QpcClock.ToMilliseconds(QpcClock.Now100ns - result.Segment.SpeechEndQpc));
-                LineReady?.Invoke(new DisplayLine(result, speakers, text, original));
+                LineReady?.Invoke(new DisplayLine(result, speakers, text, original, channel.IsDiscord ? null : channel.Name));
                 RaiseBusy();
 
                 if (config.Translator is not null && ++_linesSinceUsage >= 10)
@@ -261,7 +329,8 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     // « En cours... » : quelqu'un parle, ou une phrase attend sa transcription ou sa traduction.
     private void RaiseBusy() =>
-        BusyChanged?.Invoke(_speaking || _pipeline?.PendingSegments > 0 || Volatile.Read(ref _translating) > 0);
+        BusyChanged?.Invoke(Volatile.Read(ref _channels).Any(c => c.Speaking || c.Pipeline.PendingSegments > 0)
+            || Volatile.Read(ref _translating) > 0);
 
     private void RecordLatency(double milliseconds)
     {
@@ -320,21 +389,24 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     private void PublishStatus()
     {
-        CurrentStatus = string.Join("\n", new[] { _engineStatus, _translationStatus, _speakersStatus, _captureStatus }.Where(s => s.Length > 0));
+        var channels = Volatile.Read(ref _channels);
+        string capture = channels.Count > 0
+            ? string.Join("\n", channels.Select(c => c.Status).Where(s => s.Length > 0))
+            : _transcriber is null ? "" : T("Audio: no app selected (Settings > Audio)", "Audio : aucune appli choisie (Paramètres > Audio)");
+        CurrentStatus = string.Join("\n", new[] { _engineStatus, _translationStatus, _speakersStatus, capture }.Where(s => s.Length > 0));
         StatusChanged?.Invoke(CurrentStatus);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_voice is not null) await _voice.DisposeAsync();
-        _source?.Dispose();
-        if (_pipeline is not null) await _pipeline.DisposeAsync();
+        foreach (var channel in Volatile.Read(ref _channels))
+            await channel.DisposeAsync();
         _toTranslate.Writer.TryComplete();
         _cts.Cancel();
         if (_translationTask is not null) await _translationTask;
         _translation.Translator?.Dispose();
         _transcriber?.Dispose();
-        _vad?.Dispose();
         _cts.Dispose();
     }
 }

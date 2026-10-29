@@ -1,34 +1,74 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace DiscordVoiceTranslator.Core.Audio;
 
-public sealed record DiscordProcess(int ProcessId, string ExeName);
+public sealed record AppProcess(int ProcessId, string ExeName);
 
-public static class DiscordProcessLocator
+/// <summary>Une appli ouverte avec une fenêtre, proposée comme source audio.</summary>
+public sealed record RunningApp(string ExeName, string Title);
+
+public static class ProcessLocator
 {
     // Ordre de préférence si plusieurs variantes tournent en même temps.
-    private static readonly string[] ExeNames = ["Discord.exe", "DiscordPTB.exe", "DiscordCanary.exe"];
+    public static readonly string[] DiscordExeNames = ["Discord.exe", "DiscordPTB.exe", "DiscordCanary.exe"];
+
+    // Fenêtres qui n'ont pas de son à elles : hôtes d'applis, shell, réglages.
+    private static readonly HashSet<string> NotApps = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "explorer.exe", "ApplicationFrameHost.exe", "TextInputHost.exe", "SystemSettings.exe", "ShellExperienceHost.exe",
+    };
 
     /// <summary>
-    /// Trouve le processus Discord racine : celui dont le parent n'est pas lui-même un
-    /// processus Discord du même nom. Les sous-processus (rendu, GPU, utilitaires, clips)
-    /// en descendent, et la capture en mode INCLUDE_TARGET_PROCESS_TREE les couvre tous.
+    /// Trouve le processus racine de l'appli : celui dont le parent n'est pas lui-même un
+    /// processus du même nom. Les sous-processus (rendu, GPU, utilitaires, clips) en
+    /// descendent, et la capture en mode INCLUDE_TARGET_PROCESS_TREE les couvre tous.
     /// </summary>
-    public static DiscordProcess? FindRoot()
+    public static AppProcess? FindRoot(IEnumerable<string> exeNames)
     {
         var all = Snapshot();
-        foreach (var exe in ExeNames)
+        foreach (var exe in exeNames)
         {
             var sameName = all.Where(p => p.ExeName.Equals(exe, StringComparison.OrdinalIgnoreCase)).ToList();
             var pids = sameName.Select(p => p.Pid).ToHashSet();
             foreach (var p in sameName)
             {
                 if (!pids.Contains(p.ParentPid))
-                    return new DiscordProcess((int)p.Pid, exe);
+                    return new AppProcess((int)p.Pid, p.ExeName);
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Applis ouvertes avec une fenêtre visible (jeux compris), une par exécutable, sans
+    /// Discord (déjà proposé à part) ni cette appli. Prend quelques centaines de ms.
+    /// </summary>
+    public static List<RunningApp> ListWindowedApps()
+    {
+        int self = Environment.ProcessId;
+        var apps = new Dictionary<string, RunningApp>(StringComparer.OrdinalIgnoreCase);
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.Id == self || process.MainWindowHandle == IntPtr.Zero || process.MainWindowTitle.Length == 0)
+                        continue;
+                    string exe = process.ProcessName + ".exe";
+                    if (NotApps.Contains(exe) || DiscordExeNames.Contains(exe, StringComparer.OrdinalIgnoreCase))
+                        continue;
+                    apps.TryAdd(exe, new RunningApp(exe, process.MainWindowTitle));
+                }
+                catch (InvalidOperationException)
+                {
+                    // Fermée pendant l'énumération.
+                }
+            }
+        }
+        return apps.Values.OrderBy(a => a.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
     private readonly record struct Entry(uint Pid, uint ParentPid, string ExeName);

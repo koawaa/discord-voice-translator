@@ -70,7 +70,7 @@ public sealed class ProcessLoopbackCapture : IDisposable
         _thread = new Thread(CaptureLoop)
         {
             IsBackground = true,
-            Name = "Discord loopback capture",
+            Name = "Process loopback capture",
             // Thread très léger mais qui ne doit jamais rater un paquet, même quand le jeu
             // sature le CPU (la priorité reste relative à la classe du processus).
             Priority = ThreadPriority.Highest,

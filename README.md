@@ -7,9 +7,10 @@
 ## English
 
 Live subtitles for your Discord voice chat, translated into your language and shown in an
-overlay on top of your games, with the name and avatar of whoever is talking.
+overlay on top of your games, with the name and avatar of whoever is talking. You can also
+add a game with voice chat (CS2, War Dogs...) or any other app that plays voices.
 
-- Hears **only Discord**: not your game, not your music, not your own microphone.
+- Hears **only the apps you choose** (Discord by default): not the rest of the PC, not your own microphone.
 - Speech recognition runs **on your PC** (OpenAI Whisper, on your graphics card).
 - Translation by **DeepL** (free plan: 500,000 characters per month).
 - **No bot and no modified Discord client.** Names come from your own Discord app through its official local interface.
@@ -17,7 +18,7 @@ overlay on top of your games, with the name and avatar of whoever is talking.
 ### Requirements
 
 - **Windows 11** (64-bit). Windows 10 cannot capture the sound of a single app.
-- The **Discord desktop app** (the browser version does not work).
+- The **Discord desktop app** for names and avatars (the browser version does not work).
 - A **graphics card** is recommended (NVIDIA or AMD, about 1 GB of video memory). It also runs on the processor, but much slower.
 - About **1 GB of free space**, and internet on the first launch (the default speech model is 834 MB).
 
@@ -53,6 +54,7 @@ Without this step, subtitles still work, but each line shows the language instea
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
+- **Settings → Audio**: subtitle Discord, and add games or other apps that are open (launch the game first so it appears in the list). Their lines are labelled with the app's name and the language. The whole sound of a game is listened to, so songs with lyrics can give false lines.
 - **Settings → Transcription → Speech model**: *Fast* (Whisper large-v3-turbo, the default, light on the PC) or *Accurate* (Whisper large-v3: fewer mistakes, but slower and heavier on the graphics card, about 2 GB of video memory). A new model is downloaded once, at the next start.
 - **Settings → General → Status** shows what the app is doing: graphics card used, memory, delay, DeepL quota, Discord connection.
 
@@ -85,7 +87,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.1
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.3.0
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -96,9 +98,10 @@ for the components used. Not affiliated with Discord, DeepL or OpenAI.
 ## Français
 
 Des sous-titres en direct pour ton vocal Discord, traduits dans ta langue et affichés dans un
-overlay par-dessus tes jeux, avec le pseudo et l'avatar de la personne qui parle.
+overlay par-dessus tes jeux, avec le pseudo et l'avatar de la personne qui parle. Tu peux aussi
+ajouter un jeu avec un chat vocal (CS2, War Dogs...) ou n'importe quelle autre appli qui diffuse des voix.
 
-- Capte **uniquement Discord** : ni ton jeu, ni ta musique, ni ton propre micro.
+- Capte **uniquement les applis que tu choisis** (Discord par défaut) : ni le reste du PC, ni ton propre micro.
 - La reconnaissance vocale tourne **sur ton PC** (OpenAI Whisper, sur ta carte graphique).
 - Traduction par **DeepL** (offre gratuite : 500 000 caractères par mois).
 - **Aucun bot, aucun client Discord modifié.** Les pseudos viennent de ta propre application Discord, via son interface locale officielle.
@@ -106,7 +109,7 @@ overlay par-dessus tes jeux, avec le pseudo et l'avatar de la personne qui parle
 ### Configuration requise
 
 - **Windows 11** (64 bits). Windows 10 ne sait pas capter le son d'un seul programme.
-- L'**application Discord pour PC** (la version navigateur ne marche pas).
+- L'**application Discord pour PC** pour les pseudos et avatars (la version navigateur ne marche pas).
 - Une **carte graphique** est recommandée (NVIDIA ou AMD, environ 1 Go de mémoire vidéo). L'appli tourne aussi sur le processeur, mais bien plus lentement.
 - Environ **1 Go d'espace libre**, et internet au premier lancement (le modèle de reconnaissance par défaut fait 834 Mo).
 
@@ -143,6 +146,7 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
+- **Paramètres → Audio** : sous-titrer Discord, et ajouter des jeux ou d'autres applis ouvertes (lance d'abord le jeu pour qu'il apparaisse dans la liste). Leurs lignes portent le nom de l'appli et la langue. Tout le son d'un jeu est écouté : des chansons avec paroles peuvent donner de fausses lignes.
 - **Paramètres → Transcription → Modèle de reconnaissance** : *Rapide* (Whisper large-v3-turbo, par défaut, léger pour le PC) ou *Précis* (Whisper large-v3 : moins d'erreurs, mais plus lent et plus lourd pour la carte graphique, environ 2 Go de mémoire vidéo). Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.
 - **Paramètres → Général → État** montre ce que fait l'appli : carte graphique utilisée, mémoire, délai, quota DeepL, connexion Discord.
 
@@ -175,7 +179,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.1
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.3.0
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

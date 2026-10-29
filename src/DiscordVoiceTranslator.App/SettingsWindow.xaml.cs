@@ -7,6 +7,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Navigation;
 using System.Windows.Threading;
+using DiscordVoiceTranslator.Core.Audio;
 using DiscordVoiceTranslator.Core.Config;
 using DiscordVoiceTranslator.Core.Discord;
 using DiscordVoiceTranslator.Core.Models;
@@ -25,11 +26,13 @@ public partial class SettingsWindow : Window
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<string> _storedDeepLKeys = TranslationSettings.LoadDeepLKeys();
     private readonly ObservableCollection<KeyRow> _keys = [];
+    private readonly ObservableCollection<CapturedApp> _apps;
     private readonly DiscordAppCredentials? _storedDiscord = DiscordAppCredentials.Load();
     private bool _forgotAuthorization;
 
     internal bool TranslationChanged { get; private set; }
     internal bool DiscordChanged { get; private set; }
+    internal bool AudioChanged { get; private set; }
     internal bool RestartNeeded { get; private set; }
     internal IReadOnlyList<string> DeepLKeys { get; private set; } = [];
     internal DiscordAppCredentials? Discord { get; private set; }
@@ -47,6 +50,13 @@ public partial class SettingsWindow : Window
         TargetBox.ItemsSource = TargetLanguage.All;
         TargetBox.SelectedItem = TargetLanguage.Find(settings.Translation.TargetLanguage);
         ShowOriginalBox.IsChecked = settings.Overlay.ShowOriginal;
+
+        CaptureDiscordBox.IsChecked = settings.Audio.CaptureDiscord;
+        _apps = new ObservableCollection<CapturedApp>(settings.Audio.Apps);
+        AppsList.ItemsSource = _apps;
+        _apps.CollectionChanged += (_, _) => NoAppsText.Visibility = _apps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoAppsText.Visibility = _apps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _ = RefreshRunningAppsAsync();
 
         var fonts = Fonts.SystemFontFamilies.Select(f => f.Source).Distinct().OrderBy(f => f).ToList();
         if (!fonts.Contains(settings.Overlay.FontFamily))
@@ -128,6 +138,12 @@ public partial class SettingsWindow : Window
             return;
         }
         string model = ModelsPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? WhisperModel.DefaultId;
+        bool captureDiscord = CaptureDiscordBox.IsChecked == true;
+        if (!captureDiscord && _apps.Count == 0)
+        {
+            Fail(AudioTab, T("Choose at least one app to subtitle: Discord or another app.", "Choisis au moins une appli à sous-titrer : Discord ou une autre appli."));
+            return;
+        }
 
         string clientId = ClientIdBox.Text.Trim();
         string? typedSecret = Typed(ClientSecretBox.Password);
@@ -198,6 +214,10 @@ public partial class SettingsWindow : Window
             || model != WhisperModel.Find(transcription.Model).Id;
         TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage || keysChanged;
 
+        AudioChanged = captureDiscord != _settings.Audio.CaptureDiscord || !_apps.SequenceEqual(_settings.Audio.Apps);
+        _settings.Audio.CaptureDiscord = captureDiscord;
+        _settings.Audio.Apps = _apps.ToList();
+
         _settings.UiLanguage = uiLanguage;
         _settings.Translation.Enabled = translate;
         _settings.Translation.TargetLanguage = target;
@@ -216,6 +236,49 @@ public partial class SettingsWindow : Window
         DeepLKeys = translate ? keys : [];
         Discord = discord;
         DialogResult = true;
+    }
+
+    // Lister les processus prend quelques centaines de ms : hors du thread de l'interface.
+    private async Task RefreshRunningAppsAsync()
+    {
+        RefreshAppsButton.IsEnabled = false;
+        var running = await Task.Run(ProcessLocator.ListWindowedApps);
+        RunningAppsBox.ItemsSource = running;
+        RunningAppsBox.SelectedIndex = running.Count > 0 ? 0 : -1;
+        RefreshAppsButton.IsEnabled = true;
+    }
+
+    private async void RefreshApps_Click(object sender, RoutedEventArgs e)
+    {
+        ShowAppsError("");
+        await RefreshRunningAppsAsync();
+    }
+
+    private void AddApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (RunningAppsBox.SelectedItem is not RunningApp app)
+        {
+            ShowAppsError(T("Pick an app in the list (launch it first if it is missing).", "Choisis une appli dans la liste (lance-la d'abord si elle n'y est pas)."));
+            return;
+        }
+        if (_apps.Any(a => a.ExeName.Equals(app.ExeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            ShowAppsError(T("This app is already in the list.", "Cette appli est déjà dans la liste."));
+            return;
+        }
+        // Le titre de la fenêtre sert d'étiquette sur l'overlay : on le garde court.
+        string name = app.Title.Length > 40 ? app.Title[..40].TrimEnd() + "…" : app.Title;
+        _apps.Add(new CapturedApp(app.ExeName, name));
+        ShowAppsError("");
+    }
+
+    private void RemoveApp_Click(object sender, RoutedEventArgs e) =>
+        _apps.Remove((CapturedApp)((FrameworkElement)sender).DataContext);
+
+    private void ShowAppsError(string message)
+    {
+        AppsResult.Text = message;
+        AppsResult.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private async void AddKey_Click(object sender, RoutedEventArgs e)

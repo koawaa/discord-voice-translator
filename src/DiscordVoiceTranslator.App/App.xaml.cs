@@ -85,6 +85,7 @@ public partial class App : Application
         _engine.LineReady += line => Dispatcher.BeginInvoke(() => ShowLine(overlay, line));
         ApplyTranslation(TranslationSettings.LoadDeepLKeys());
         _engine.ConfigureDiscord(DiscordAppCredentials.Load(), _settings.Discord.SpeakerMarginMs);
+        _engine.ConfigureAudio(_settings.Audio.CaptureDiscord, _settings.Audio.Apps);
 
         // Tout premier lancement : les paramètres expliquent quoi configurer (Discord, DeepL).
         // Ouverts sans attendre, pendant que le modèle se télécharge.
@@ -178,6 +179,8 @@ public partial class App : Application
         _overlay?.ApplySettings();
         if (window.TranslationChanged)
             ApplyTranslation(window.DeepLKeys);
+        if (window.AudioChanged)
+            _engine?.ConfigureAudio(_settings.Audio.CaptureDiscord, _settings.Audio.Apps);
         if (window.DiscordChanged)
             _engine?.ConfigureDiscord(window.Discord, _settings.Discord.SpeakerMarginMs);
         else
@@ -230,12 +233,13 @@ public partial class App : Application
         IReadOnlyList<OverlaySpeaker> speakers = line.Speakers
             .Select(m => new OverlaySpeaker(m.DisplayName, SpeakerColors.For(m.Id), Avatar(m.AvatarUrl)))
             .ToList();
+        string language = line.Transcription.Language;
+        // Voix d'un jeu ou d'une autre appli : son nom et la langue, ex. « War Dogs · Anglais ».
+        if (line.OtherApp is not null)
+            speakers = [new OverlaySpeaker($"{line.OtherApp} · {SpokenLanguages.Name(language)}", SpeakerColors.For(line.OtherApp), null)];
         // Personne d'identifié (RPC absent, ou voix sans événement Discord) : la langue sert d'étiquette.
-        if (speakers.Count == 0)
-        {
-            string language = line.Transcription.Language;
+        else if (speakers.Count == 0)
             speakers = [new OverlaySpeaker(SpokenLanguages.Name(language), SpeakerColors.For(language), null)];
-        }
         overlay.AddLine(speakers, line.Text, line.Original);
     }
 

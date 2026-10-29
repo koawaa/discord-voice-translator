@@ -80,7 +80,7 @@ pipeline.Start();
 
 if (filePath is null)
 {
-    using var source = new DiscordAudioSource();
+    using var source = AppAudioSource.Discord();
     source.StatusChanged += msg => Console.WriteLine($"[statut] {msg}");
     source.Data16kMono += pipeline.PushAudio;
     source.Start();

@@ -22,6 +22,7 @@ internal sealed class AppSettings
     public OverlaySettings Overlay { get; set; } = new();
     public TranslationSettings Translation { get; set; } = new();
     public TranscriptionSettings Transcription { get; set; } = new();
+    public AudioSettings Audio { get; set; } = new();
     public DiscordSettings Discord { get; set; } = new();
 
     /// <summary>Faux au tout premier lancement : on en profite pour ouvrir les paramètres.</summary>
@@ -106,6 +107,16 @@ internal sealed class TranscriptionSettings
 
     public bool UseGpu { get; set; } = true;
 }
+
+/// <summary>Applis dont on sous-titre les voix : Discord de base, plus des jeux ou d'autres applis.</summary>
+internal sealed class AudioSettings
+{
+    public bool CaptureDiscord { get; set; } = true;
+    public List<CapturedApp> Apps { get; set; } = [];
+}
+
+/// <summary>Une appli captée en plus de Discord, retrouvée par son exécutable à chaque lancement.</summary>
+internal sealed record CapturedApp(string ExeName, string Name);
 
 internal sealed class DiscordSettings
 {

@@ -21,7 +21,7 @@ public sealed record WhisperOptions
 
 /// <summary>
 /// Whisper local via whisper.cpp. Le modèle est chargé une seule fois ; les segments sont
-/// traités un par un.
+/// traités un par un, même quand plusieurs sources audio (Discord, un jeu) le partagent.
 /// </summary>
 public sealed class WhisperTranscriber : ITranscriber
 {
@@ -30,6 +30,7 @@ public sealed class WhisperTranscriber : ITranscriber
 
     private readonly WhisperFactory _factory;
     private readonly WhisperProcessor _processor;
+    private readonly SemaphoreSlim _busy = new(1, 1);
     private readonly string[] _allowedLanguages;
 
     public string Description { get; }
@@ -67,6 +68,20 @@ public sealed class WhisperTranscriber : ITranscriber
     }
 
     public async Task<TranscriptionResult?> TranscribeAsync(SpeechSegment segment, CancellationToken cancellationToken)
+    {
+        // Le processeur garde la langue choisie entre deux appels : une phrase à la fois.
+        await _busy.WaitAsync(cancellationToken);
+        try
+        {
+            return await TranscribeAloneAsync(segment, cancellationToken);
+        }
+        finally
+        {
+            _busy.Release();
+        }
+    }
+
+    private async Task<TranscriptionResult?> TranscribeAloneAsync(SpeechSegment segment, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         float[] samples = segment.Samples;
@@ -117,5 +132,6 @@ public sealed class WhisperTranscriber : ITranscriber
     {
         _processor.Dispose();
         _factory.Dispose();
+        _busy.Dispose();
     }
 }

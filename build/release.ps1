@@ -1,5 +1,5 @@
 # Fabrique l'installateur : artifacts\DiscordVoiceTranslator-Setup-<version>.exe
-# Usage : powershell -ExecutionPolicy Bypass -File build\release.ps1 [-Version 1.3.0]
+# Usage : powershell -ExecutionPolicy Bypass -File build\release.ps1 [-Version 1.4.0]
 # Prérequis : SDK .NET 8, Inno Setup 6 (winget install JRSoftware.InnoSetup).
 param([string]$Version = '1.0.0')
 $ErrorActionPreference = 'Stop'

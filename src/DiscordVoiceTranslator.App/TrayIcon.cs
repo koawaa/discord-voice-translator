@@ -15,9 +15,11 @@ internal sealed class TrayIcon : IDisposable
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ContextMenuStrip _menu = new();
     private readonly Icon _icon = DrawIcon();
+    private readonly Forms.ToolStripMenuItem _pauseItem;
 
     public event Action? EditModeRequested;
     public event Action? VisibilityToggleRequested;
+    public event Action? PauseToggleRequested;
     public event Action? SettingsRequested;
     public event Action? QuitRequested;
 
@@ -25,6 +27,8 @@ internal sealed class TrayIcon : IDisposable
     {
         _menu.Items.Add(T("Edit mode (Ctrl+Alt+F9)", "Mode édition (Ctrl+Alt+F9)"), null, (_, _) => EditModeRequested?.Invoke());
         _menu.Items.Add(T("Show / hide (Ctrl+Alt+F10)", "Afficher / masquer (Ctrl+Alt+F10)"), null, (_, _) => VisibilityToggleRequested?.Invoke());
+        _pauseItem = new Forms.ToolStripMenuItem(PauseText(false), null, (_, _) => PauseToggleRequested?.Invoke());
+        _menu.Items.Add(_pauseItem);
         _menu.Items.Add(T("Settings...", "Paramètres..."), null, (_, _) => SettingsRequested?.Invoke());
         _menu.Items.Add(new Forms.ToolStripSeparator());
         _menu.Items.Add(T("Quit", "Quitter"), null, (_, _) => QuitRequested?.Invoke());
@@ -38,6 +42,15 @@ internal sealed class TrayIcon : IDisposable
         };
         _notifyIcon.DoubleClick += (_, _) => EditModeRequested?.Invoke();
     }
+
+    public void SetPaused(bool paused)
+    {
+        _pauseItem.Text = PauseText(paused);
+        _notifyIcon.Text = T("Discord Voice Translator", "Traducteur vocal Discord") + (paused ? T(" (paused)", " (en pause)") : "");
+    }
+
+    private static string PauseText(bool paused) =>
+        paused ? T("Resume (Ctrl+Alt+F11)", "Reprendre (Ctrl+Alt+F11)") : T("Pause (Ctrl+Alt+F11)", "Mettre en pause (Ctrl+Alt+F11)");
 
     // Une bulle de dialogue avec deux lignes de « sous-titres », lisible même en 16 px.
     private static Icon DrawIcon()

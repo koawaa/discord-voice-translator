@@ -26,6 +26,9 @@
                     <TextBlock x:Name="StatusText" Foreground="#FF8FD18F" FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <Button x:Name="PauseButton" Click="Pause_Click"
+                            Height="28" Padding="10,0" Margin="0,0,6,0"
+                            Foreground="White" Background="#33FFFFFF" BorderThickness="0" Cursor="Hand" />
                     <Button Content="{local:Tr En=Settings..., Fr=Paramètres...}" Click="Settings_Click"
                             Height="28" Padding="10,0" Margin="0,0,6,0"
                             Foreground="White" Background="#33FFFFFF" BorderThickness="0" Cursor="Hand" />
@@ -41,11 +44,19 @@
             <!-- Les lignes s'empilent par le bas : la plus récente est toujours au même endroit. -->
             <StackPanel x:Name="Lines" Grid.Row="1" VerticalAlignment="Bottom" />
 
-            <Border x:Name="BusyIndicator" Grid.Row="2" Visibility="Collapsed" HorizontalAlignment="Left"
-                    Margin="0,4,0,0" Padding="8,2" CornerRadius="4" Background="#88000000">
-                <TextBlock Foreground="#FFB8C2CC" FontSize="13" FontStyle="Italic"
-                           Text="{local:Tr En='● listening...', Fr='● en cours...'}" />
-            </Border>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Left">
+                <!-- Reste affiché verrouillé : on ne doit pas oublier que plus rien n'est sous-titré. -->
+                <Border x:Name="PausedIndicator" Visibility="Collapsed"
+                        Margin="0,4,6,0" Padding="8,2" CornerRadius="4" Background="#88000000">
+                    <TextBlock Foreground="#FFFFC864" FontSize="13" FontWeight="SemiBold"
+                               Text="{local:Tr En='❚❚ paused (Ctrl+Alt+F11)', Fr='❚❚ en pause (Ctrl+Alt+F11)'}" />
+                </Border>
+                <Border x:Name="BusyIndicator" Visibility="Collapsed"
+                        Margin="0,4,0,0" Padding="8,2" CornerRadius="4" Background="#88000000">
+                    <TextBlock Foreground="#FFB8C2CC" FontSize="13" FontStyle="Italic"
+                               Text="{local:Tr En='● listening...', Fr='● en cours...'}" />
+                </Border>
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

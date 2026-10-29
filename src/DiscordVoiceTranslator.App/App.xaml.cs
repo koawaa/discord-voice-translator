@@ -62,6 +62,7 @@ public partial class App : Application
 
         var overlay = _overlay = new OverlayWindow(_settings.Overlay);
         overlay.SettingsRequested += OpenSettings;
+        overlay.PauseToggleRequested += TogglePause;
         overlay.GeometryChanged += SaveSettings;
         overlay.Show();
 
@@ -70,6 +71,7 @@ public partial class App : Application
         _tray = new TrayIcon();
         _tray.EditModeRequested += overlay.ToggleEditMode;
         _tray.VisibilityToggleRequested += overlay.ToggleVisibility;
+        _tray.PauseToggleRequested += TogglePause;
         _tray.SettingsRequested += OpenSettings;
         _tray.QuitRequested += () => Shutdown();
 
@@ -195,6 +197,20 @@ public partial class App : Application
             if (answer == MessageBoxResult.Yes)
                 Restart();
         }
+    }
+
+    /// <summary>
+    /// Pause : l'appli reste ouverte mais n'écoute plus rien, donc ne consomme ni caractères
+    /// DeepL ni ressources pour Whisper. Pas retenue d'un lancement à l'autre.
+    /// </summary>
+    private void TogglePause()
+    {
+        if (_engine is null)
+            return;
+        bool paused = !_engine.Paused;
+        _engine.SetPaused(paused);
+        _overlay?.SetPaused(paused);
+        _tray?.SetPaused(paused);
     }
 
     private void Restart()

@@ -29,6 +29,9 @@ public partial class OverlayWindow : Window
     /// <summary>Bouton « Settings... » du mode édition.</summary>
     public event Action? SettingsRequested;
 
+    /// <summary>Bouton pause du mode édition, ou Ctrl+Alt+F11.</summary>
+    public event Action? PauseToggleRequested;
+
     /// <summary>L'overlay a été déplacé ou redimensionné (à la sortie du mode édition).</summary>
     public event Action? GeometryChanged;
 
@@ -40,6 +43,7 @@ public partial class OverlayWindow : Window
         Height = settings.Height;
         PlaceWindow();
         ApplySettings();
+        SetPaused(false);
 
         SourceInitialized += OnSourceInitialized;
         MouseLeftButtonDown += (_, _) => { if (_editMode) DragMove(); };
@@ -52,9 +56,11 @@ public partial class OverlayWindow : Window
         _hotkeys = new GlobalHotkeys(_hwnd);
         bool editOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F9, ToggleEditMode);
         bool hideOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F10, ToggleVisibility);
+        bool pauseOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F11, () => PauseToggleRequested?.Invoke());
         string taken = T(" (ALREADY IN USE)", " (DÉJÀ PRIS)");
         HotkeyHelp.Text = T("Ctrl+Alt+F9: lock / edit", "Ctrl+Alt+F9 : verrouiller / éditer") + (editOk ? "" : taken)
-            + "   ·   " + T("Ctrl+Alt+F10: hide / show", "Ctrl+Alt+F10 : masquer / afficher") + (hideOk ? "" : taken);
+            + "   ·   " + T("Ctrl+Alt+F10: hide / show", "Ctrl+Alt+F10 : masquer / afficher") + (hideOk ? "" : taken)
+            + "   ·   " + T("Ctrl+Alt+F11: pause", "Ctrl+Alt+F11 : pause") + (pauseOk ? "" : taken);
 
         // Démarre en mode édition pour voir où est l'overlay et l'état du moteur.
         SetEditMode(true);
@@ -142,6 +148,12 @@ public partial class OverlayWindow : Window
 
     public void SetBusy(bool busy) => BusyIndicator.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
 
+    internal void SetPaused(bool paused)
+    {
+        PausedIndicator.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        PauseButton.Content = paused ? T("▶ Resume", "▶ Reprendre") : T("❚❚ Pause", "❚❚ Pause");
+    }
+
     /// <summary>
     /// Ajoute une prise de parole : avatars et noms colorés (« A / B » si deux voix se
     /// mêlent), texte, original optionnel en petit.
@@ -220,6 +232,8 @@ public partial class OverlayWindow : Window
         Placeholder.Visibility = _editMode && Lines.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void Settings_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
+
+    private void Pause_Click(object sender, RoutedEventArgs e) => PauseToggleRequested?.Invoke();
 
     private void Quit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 

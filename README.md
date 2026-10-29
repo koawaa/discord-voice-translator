@@ -51,6 +51,7 @@ Without this step, subtitles still work, but each line shows the language instea
 
 - **Ctrl+Alt+F9**: edit mode (drag to move, bottom-right corner to resize), press again to lock. Once locked, your clicks go through to the game.
 - **Ctrl+Alt+F10**: hide or show the subtitles.
+- **Ctrl+Alt+F11**: pause or resume (also in the tray menu and the edit-mode bar). While paused nothing is listened to or translated, so no DeepL characters are used, and the app stays open.
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
@@ -87,7 +88,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.3.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.4.0
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -144,6 +145,7 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 
 - **Ctrl+Alt+F9** : mode édition (glisser pour déplacer, coin bas-droit pour redimensionner), puis de nouveau pour verrouiller. Une fois verrouillé, tes clics passent au jeu.
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
+- **Ctrl+Alt+F11** : mettre en pause ou reprendre (aussi dans le menu de l'icône et la barre du mode édition). En pause, rien n'est écouté ni traduit, donc aucun caractère DeepL n'est consommé, et l'appli reste ouverte.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
 - **Paramètres → Audio** : sous-titrer Discord, et ajouter des jeux ou d'autres applis ouvertes (lance d'abord le jeu pour qu'il apparaisse dans la liste). Leurs lignes portent le nom de l'appli et la langue. Tout le son d'un jeu est écouté : des chansons avec paroles peuvent donner de fausses lignes.
@@ -179,7 +181,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.3.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.4.0
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

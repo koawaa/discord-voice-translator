@@ -81,6 +81,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
     private double? _lastTranslationMs;
     private int _linesSinceUsage;
     private int _translating;
+    private volatile bool _paused;
 
     public event Action<string>? StatusChanged;
     public event Action<bool>? BusyChanged;
@@ -88,6 +89,8 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     /// <summary>Dernier état publié (Whisper, traduction, pseudos, capture), une ligne chacun.</summary>
     public string CurrentStatus { get; private set; } = "";
+
+    public bool Paused => _paused;
 
     public TranslatorEngine(TranscriptionSettings transcription) => _transcription = transcription;
 
@@ -138,14 +141,30 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             RebuildChannels();
     }
 
+    /// <summary>
+    /// En pause, plus rien n'est capté : ni Whisper ni DeepL ne travaillent (aucun caractère
+    /// consommé), mais l'appli reste ouverte et Whisper chargé pour reprendre aussitôt.
+    /// </summary>
+    public void SetPaused(bool paused)
+    {
+        _paused = paused;
+        if (_transcriber is not null && !_cts.IsCancellationRequested)
+            RebuildChannels();
+        else
+            PublishStatus();
+    }
+
     private void RebuildChannels()
     {
         var (discord, apps) = _audioConfig;
         var channels = new List<AudioChannel>();
-        if (discord)
-            channels.Add(CreateChannel("Discord", isDiscord: true, AppAudioSource.Discord()));
-        foreach (var app in apps)
-            channels.Add(CreateChannel(app.Name, isDiscord: false, new AppAudioSource(app.Name, [app.ExeName])));
+        if (!_paused)
+        {
+            if (discord)
+                channels.Add(CreateChannel("Discord", isDiscord: true, AppAudioSource.Discord()));
+            foreach (var app in apps)
+                channels.Add(CreateChannel(app.Name, isDiscord: false, new AppAudioSource(app.Name, [app.ExeName])));
+        }
 
         var previous = _channels;
         Volatile.Write(ref _channels, channels);
@@ -270,6 +289,13 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             // Une phrase à la fois, dans l'ordre : les lignes ne peuvent pas s'afficher dans le désordre.
             await foreach (var (result, channel) in _toTranslate.Reader.ReadAllAsync(_cts.Token))
             {
+                // Phrase finie juste avant la pause : on la jette plutôt que de la traduire.
+                if (_paused)
+                {
+                    Interlocked.Decrement(ref _translating);
+                    RaiseBusy();
+                    continue;
+                }
                 var config = Volatile.Read(ref _translation);
                 string text = result.Text;
                 string? original = null;
@@ -390,8 +416,9 @@ internal sealed class TranslatorEngine : IAsyncDisposable
     private void PublishStatus()
     {
         var channels = Volatile.Read(ref _channels);
-        string capture = channels.Count > 0
-            ? string.Join("\n", channels.Select(c => c.Status).Where(s => s.Length > 0))
+        string capture = _paused ? T("PAUSED: nothing is listened to or translated (Ctrl+Alt+F11 to resume)",
+                                     "EN PAUSE : rien n'est écouté ni traduit (Ctrl+Alt+F11 pour reprendre)")
+            : channels.Count > 0 ? string.Join("\n", channels.Select(c => c.Status).Where(s => s.Length > 0))
             : _transcriber is null ? "" : T("Audio: no app selected (Settings > Audio)", "Audio : aucune appli choisie (Paramètres > Audio)");
         CurrentStatus = string.Join("\n", new[] { _engineStatus, _translationStatus, _speakersStatus, capture }.Where(s => s.Length > 0));
         StatusChanged?.Invoke(CurrentStatus);

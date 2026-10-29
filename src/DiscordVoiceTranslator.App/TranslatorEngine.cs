@@ -66,10 +66,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     public async Task StartAsync()
     {
-        // Modèle importé introuvable (déplacé, supprimé) : on retombe sur le modèle par défaut.
-        string modelPath = _transcription.Model == TranscriptionSettings.CustomModel && File.Exists(_transcription.CustomModelPath)
-            ? _transcription.CustomModelPath!
-            : await DownloadWhisperModelAsync(WhisperModel.Find(_transcription.Model).File);
+        string modelPath = await DownloadWhisperModelAsync(WhisperModel.Find(_transcription.Model).File);
         SetEngineStatus(T("Loading Whisper...", "Chargement de Whisper..."));
         await Task.Run(async () =>
         {
@@ -90,10 +87,10 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                // Le plus souvent un modèle trop gros pour la carte graphique, ou un fichier importé qui n'est pas un modèle ggml.
+                // Le plus souvent un modèle trop gros pour la mémoire vidéo libre (jeu gourmand à côté).
                 throw new InvalidOperationException(
-                    T($"the Whisper model {Path.GetFileName(modelPath)} could not be loaded ({ex.Message}). Pick another model (or a lighter one) in Settings > Transcription.",
-                      $"le modèle Whisper {Path.GetFileName(modelPath)} n'a pas pu être chargé ({ex.Message}). Choisis un autre modèle (ou un plus léger) dans Paramètres > Transcription."), ex);
+                    T($"the Whisper model {Path.GetFileName(modelPath)} could not be loaded ({ex.Message}). Pick \"Fast\" in Settings > Transcription.",
+                      $"le modèle Whisper {Path.GetFileName(modelPath)} n'a pas pu être chargé ({ex.Message}). Choisis « Rapide » dans Paramètres > Transcription."), ex);
             }
         });
 

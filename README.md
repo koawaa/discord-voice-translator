@@ -53,7 +53,7 @@ Without this step, subtitles still work, but each line shows the language instea
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
-- **Settings → Transcription → Speech model**: from *Light* (modest PC) to *Maximum* (powerful graphics card), or your own Whisper model file (ggml `.bin`). Bigger models make fewer mistakes but are slower; a new model is downloaded once, at the next start.
+- **Settings → Transcription → Speech model**: *Fast* (Whisper large-v3-turbo, the default, light on the PC) or *Accurate* (Whisper large-v3: fewer mistakes, but slower and heavier on the graphics card, about 2 GB of video memory). A new model is downloaded once, at the next start.
 - **Settings → General → Status** shows what the app is doing: graphics card used, memory, delay, DeepL quota, Discord connection.
 
 ### Privacy
@@ -85,7 +85,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.1
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -143,7 +143,7 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
-- **Paramètres → Transcription → Modèle de reconnaissance** : de *Léger* (PC modeste) à *Maximum* (carte graphique puissante), ou ton propre fichier de modèle Whisper (ggml `.bin`). Plus le modèle est gros, moins il fait d'erreurs, mais plus il est lent ; un nouveau modèle est téléchargé une seule fois, au prochain démarrage.
+- **Paramètres → Transcription → Modèle de reconnaissance** : *Rapide* (Whisper large-v3-turbo, par défaut, léger pour le PC) ou *Précis* (Whisper large-v3 : moins d'erreurs, mais plus lent et plus lourd pour la carte graphique, environ 2 Go de mémoire vidéo). Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.
 - **Paramètres → Général → État** montre ce que fait l'appli : carte graphique utilisée, mémoire, délai, quota DeepL, connexion Discord.
 
 ### Confidentialité
@@ -175,7 +175,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.1
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

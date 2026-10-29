@@ -799,21 +799,8 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
-                                           Text="{local:Tr En='A bigger model makes fewer mistakes, but uses more video memory and takes longer for each sentence. A new model is downloaded once, at the next start.', Fr='Un modèle plus gros fait moins d’erreurs, mais prend plus de mémoire vidéo et plus de temps pour chaque phrase. Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.'}" />
-                                <StackPanel x:Name="ModelsPanel" />
-                                <RadioButton x:Name="CustomModelOption" Style="{StaticResource Option}" GroupName="Model" Margin="0">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource Label}" Text="{local:Tr En='My own model file', Fr='Mon propre fichier de modèle'}" />
-                                        <TextBlock Style="{StaticResource Hint}"
-                                                   Text="{local:Tr En='A Whisper model in whisper.cpp format (ggml .bin), for example one fine-tuned for your language.', Fr='Un modèle Whisper au format whisper.cpp (ggml .bin), par exemple un modèle affiné pour ta langue.'}" />
-                                        <DockPanel Margin="0,10,0,0">
-                                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="BrowseModel_Click"
-                                                    Content="{local:Tr En='Browse...', Fr='Parcourir...'}" />
-                                            <TextBlock x:Name="CustomModelPathText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
-                                        </DockPanel>
-                                    </StackPanel>
-                                </RadioButton>
+                                           Text="{local:Tr En='Fast is lighter on the PC; Accurate makes fewer mistakes but asks more of it. A new model is downloaded once, at the next start.', Fr='Rapide ménage le PC ; Précis fait moins d’erreurs mais lui demande plus. Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.'}" />
+                                <StackPanel x:Name="ModelsPanel" Margin="0,0,0,-8" />
                             </StackPanel>
                         </Border>
 

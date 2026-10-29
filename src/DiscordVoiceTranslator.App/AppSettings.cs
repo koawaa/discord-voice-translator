@@ -95,13 +95,8 @@ internal sealed class TranslationSettings
 
 internal sealed class TranscriptionSettings
 {
-    public const string CustomModel = "custom";
-
-    /// <summary>Modèle Whisper du catalogue (<see cref="WhisperModel.Id"/>), ou « custom » pour <see cref="CustomModelPath"/>.</summary>
+    /// <summary>Modèle Whisper choisi (<see cref="WhisperModel.Id"/>) : rapide ou précis.</summary>
     public string Model { get; set; } = WhisperModel.DefaultId;
-
-    /// <summary>Fichier ggml (.bin) choisi par l'utilisateur.</summary>
-    public string? CustomModelPath { get; set; }
 
     /// <summary>Langues que Whisper a le droit de détecter (codes ISO à deux lettres).</summary>
     public List<string> AllowedLanguages { get; set; } = ["en", "fr", "es", "de"];

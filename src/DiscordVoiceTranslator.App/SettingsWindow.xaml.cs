@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -28,7 +27,6 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<KeyRow> _keys = [];
     private readonly DiscordAppCredentials? _storedDiscord = DiscordAppCredentials.Load();
     private bool _forgotAuthorization;
-    private string? _customModelPath;
 
     internal bool TranslationChanged { get; private set; }
     internal bool DiscordChanged { get; private set; }
@@ -73,7 +71,6 @@ public partial class SettingsWindow : Window
         SilenceSlider.Value = settings.Transcription.EndOfSentenceSilenceMs;
         UseGpuBox.IsChecked = settings.Transcription.UseGpu;
 
-        bool custom = settings.Transcription.Model == TranscriptionSettings.CustomModel;
         string selectedModel = WhisperModel.Find(settings.Transcription.Model).Id;
         foreach (var model in WhisperModel.All)
         {
@@ -94,13 +91,10 @@ public partial class SettingsWindow : Window
                 Style = (Style)FindResource("Option"),
                 GroupName = "Model",
                 Tag = model.Id,
-                IsChecked = !custom && model.Id == selectedModel,
+                IsChecked = model.Id == selectedModel,
                 Content = content,
             });
         }
-        CustomModelOption.IsChecked = custom;
-        _customModelPath = settings.Transcription.CustomModelPath;
-        ShowCustomModelPath();
 
         foreach (string key in _storedDeepLKeys)
             _keys.Add(new KeyRow(key) { Status = T("Saved (encrypted)", "Enregistrée (chiffrée)"), StatusBrush = ThemeBrush("TextMutedBrush") });
@@ -133,14 +127,7 @@ public partial class SettingsWindow : Window
             Fail(TranscriptionTab, T("Tick at least one language.", "Coche au moins une langue."));
             return;
         }
-        string model = CustomModelOption.IsChecked == true
-            ? TranscriptionSettings.CustomModel
-            : ModelsPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? WhisperModel.DefaultId;
-        if (model == TranscriptionSettings.CustomModel && !File.Exists(_customModelPath))
-        {
-            Fail(TranscriptionTab, T("Choose your model file, or pick another model.", "Choisis ton fichier de modèle, ou un autre modèle."));
-            return;
-        }
+        string model = ModelsPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? WhisperModel.DefaultId;
 
         string clientId = ClientIdBox.Text.Trim();
         string? typedSecret = Typed(ClientSecretBox.Password);
@@ -208,8 +195,7 @@ public partial class SettingsWindow : Window
             || !allowed.SequenceEqual(transcription.AllowedLanguages)
             || silence != transcription.EndOfSentenceSilenceMs
             || useGpu != transcription.UseGpu
-            || model != transcription.Model
-            || (model == TranscriptionSettings.CustomModel && _customModelPath != transcription.CustomModelPath);
+            || model != WhisperModel.Find(transcription.Model).Id;
         TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage || keysChanged;
 
         _settings.UiLanguage = uiLanguage;
@@ -225,32 +211,11 @@ public partial class SettingsWindow : Window
         transcription.EndOfSentenceSilenceMs = silence;
         transcription.UseGpu = useGpu;
         transcription.Model = model;
-        transcription.CustomModelPath = _customModelPath;
         _settings.Discord.SpeakerMarginMs = (int)MarginSlider.Value;
 
         DeepLKeys = translate ? keys : [];
         Discord = discord;
         DialogResult = true;
-    }
-
-    private void BrowseModel_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = T("Whisper model file", "Fichier de modèle Whisper"),
-            Filter = T("Whisper model (ggml)|*.bin|All files|*.*", "Modèle Whisper (ggml)|*.bin|Tous les fichiers|*.*"),
-        };
-        if (dialog.ShowDialog(this) != true)
-            return;
-        _customModelPath = dialog.FileName;
-        CustomModelOption.IsChecked = true;
-        ShowCustomModelPath();
-    }
-
-    private void ShowCustomModelPath()
-    {
-        CustomModelPathText.Text = _customModelPath ?? T("No file chosen", "Aucun fichier choisi");
-        CustomModelPathText.ToolTip = _customModelPath;
     }
 
     private async void AddKey_Click(object sender, RoutedEventArgs e)

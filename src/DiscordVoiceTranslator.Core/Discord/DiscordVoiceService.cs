@@ -60,7 +60,7 @@ public sealed class DiscordVoiceService : IAsyncDisposable
                 }
                 else
                 {
-                    await using var client = new DiscordRpcClient(connection);
+                    await using var client = new DiscordRpcClient(connection, token);
                     await RunSessionAsync(client, token);
                 }
             }
@@ -93,7 +93,7 @@ public sealed class DiscordVoiceService : IAsyncDisposable
         await AuthenticateAsync(client, token);
         await client.SendAsync("SUBSCRIBE", evt: "VOICE_CHANNEL_SELECT");
         await RefreshChannelAsync(client);
-        await client.Completion; // jusqu'à ce que Discord se ferme ou coupe la connexion
+        await client.Completion.WaitAsync(token); // jusqu'à ce que Discord coupe la connexion, ou qu'on quitte
     }
 
     private async Task AuthenticateAsync(DiscordRpcClient client, CancellationToken token)

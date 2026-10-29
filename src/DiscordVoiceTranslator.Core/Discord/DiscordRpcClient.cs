@@ -20,7 +20,7 @@ internal sealed class DiscordRpcClient : IAsyncDisposable
 {
     private readonly DiscordIpcConnection _connection;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonNode?>> _pending = new();
-    private readonly CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _cts;
     private Task? _readLoop;
 
     /// <summary>
@@ -32,7 +32,15 @@ internal sealed class DiscordRpcClient : IAsyncDisposable
     /// <summary>Se termine (en erreur) quand la connexion à Discord est perdue.</summary>
     public Task Completion => _readLoop ?? Task.CompletedTask;
 
-    public DiscordRpcClient(DiscordIpcConnection connection) => _connection = connection;
+    /// <param name="cancellationToken">
+    /// Coupe la lecture et les commandes en attente : sans lui, quitter l'appli attendrait que
+    /// Discord ferme la connexion, c'est-à-dire indéfiniment.
+    /// </param>
+    public DiscordRpcClient(DiscordIpcConnection connection, CancellationToken cancellationToken)
+    {
+        _connection = connection;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    }
 
     /// <summary>Présente l'application à Discord. Renvoie les données de READY (dont l'utilisateur connecté).</summary>
     public async Task<JsonNode?> HandshakeAsync(string clientId, CancellationToken cancellationToken)

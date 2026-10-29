@@ -103,6 +103,13 @@ public partial class OverlayWindow : Window
         SetEditMode(!_editMode);
     }
 
+    /// <summary>Rend l'overlay visible et saisissable, quel que soit son état.</summary>
+    internal void ShowForEditing()
+    {
+        if (!IsVisible) Show();
+        if (!_editMode) SetEditMode(true);
+    }
+
     internal void ToggleVisibility()
     {
         if (IsVisible) Hide();

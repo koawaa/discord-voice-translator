@@ -14,6 +14,9 @@ namespace DiscordVoiceTranslator.App;
 public partial class App : Application
 {
     private const string RestartedArg = "--restarted";
+    private const string InstanceMutexName = @"Local\DiscordVoiceTranslator";
+    private const string ShowRequestName = @"Local\DiscordVoiceTranslator.ShowRequest";
+    private const string ShowDoneName = @"Local\DiscordVoiceTranslator.ShowDone";
 
     private readonly AppSettings _settings = AppSettings.Load();
     private Mutex? _instanceMutex;
@@ -30,22 +33,28 @@ public partial class App : Application
 
         // Une seule instance : deux overlays se disputeraient les raccourcis et la capture.
         // Après un redémarrage demandé par les réglages, on attend que l'ancienne se ferme.
-        _instanceMutex = new Mutex(false, @"Local\DiscordVoiceTranslator");
-        try
-        {
-            _ownsInstance = _instanceMutex.WaitOne(e.Args.Contains(RestartedArg) ? TimeSpan.FromSeconds(15) : TimeSpan.Zero);
-        }
-        catch (AbandonedMutexException)
-        {
-            _ownsInstance = true; // l'ancienne instance a planté : la place est libre
-        }
+        _instanceMutex = new Mutex(false, InstanceMutexName);
+        _ownsInstance = TryOwnInstance(e.Args.Contains(RestartedArg) ? TimeSpan.FromSeconds(15) : TimeSpan.Zero);
         if (!_ownsInstance)
         {
-            MessageBox.Show(T("Discord Voice Translator is already running: look for its icon next to the clock (hidden icons arrow).",
-                              "Le traducteur vocal Discord est déjà lancé : cherche son icône près de l'horloge (flèche des icônes cachées)."),
-                            T("Discord Voice Translator", "Traducteur vocal Discord"));
-            Shutdown();
-            return;
+            // Déjà lancée : verrouillée sans sous-titre, elle est invisible et son icône peut être
+            // cachée. On lui demande de se montrer en mode édition, et on s'arrête là.
+            if (AskRunningInstanceToShow())
+            {
+                Shutdown();
+                return;
+            }
+            // Pas de réponse : l'autre instance est bloquée. On la ferme et on prend sa place.
+            CloseOtherInstances();
+            _ownsInstance = TryOwnInstance(TimeSpan.FromSeconds(10));
+            if (!_ownsInstance)
+            {
+                MessageBox.Show(T("Another copy of Discord Voice Translator is stuck and could not be closed. Restart Windows, then try again.",
+                                  "Une autre copie du traducteur vocal Discord est bloquée et n'a pas pu être fermée. Redémarre Windows, puis réessaie."),
+                                T("Discord Voice Translator", "Traducteur vocal Discord"));
+                Shutdown();
+                return;
+            }
         }
 
         // Le jeu passe avant nous pour le CPU.
@@ -55,6 +64,8 @@ public partial class App : Application
         overlay.SettingsRequested += OpenSettings;
         overlay.GeometryChanged += SaveSettings;
         overlay.Show();
+
+        ListenForShowRequests(overlay);
 
         _tray = new TrayIcon();
         _tray.EditModeRequested += overlay.ToggleEditMode;
@@ -90,6 +101,69 @@ public partial class App : Application
         catch (Exception ex)
         {
             overlay.SetStatus(T("Could not start: ", "Impossible de démarrer : ") + ex.Message);
+        }
+    }
+
+    private bool TryOwnInstance(TimeSpan wait)
+    {
+        try
+        {
+            return _instanceMutex!.WaitOne(wait);
+        }
+        catch (AbandonedMutexException)
+        {
+            return true; // l'ancienne instance a planté : la place est libre
+        }
+    }
+
+    /// <summary>
+    /// Côté nouvelle instance : demande à celle déjà lancée de se montrer. Vrai si elle a
+    /// répondu ; faux si elle ne répond pas (bloquée) ou est trop ancienne pour savoir répondre.
+    /// </summary>
+    private static bool AskRunningInstanceToShow()
+    {
+        using var request = new EventWaitHandle(false, EventResetMode.AutoReset, ShowRequestName);
+        using var shown = new EventWaitHandle(false, EventResetMode.AutoReset, ShowDoneName);
+        request.Set();
+        return shown.WaitOne(TimeSpan.FromSeconds(3));
+    }
+
+    /// <summary>Côté instance lancée : se montre en mode édition quand une autre le demande.</summary>
+    private void ListenForShowRequests(OverlayWindow overlay)
+    {
+        var request = new EventWaitHandle(false, EventResetMode.AutoReset, ShowRequestName);
+        var shown = new EventWaitHandle(false, EventResetMode.AutoReset, ShowDoneName);
+        var listener = new Thread(() =>
+        {
+            while (request.WaitOne())
+            {
+                // On ne répond qu'une fois l'overlay réellement affiché : si l'interface est
+                // bloquée, l'autre instance le saura (pas de réponse) et prendra la relève.
+                var operation = Dispatcher.BeginInvoke(overlay.ShowForEditing);
+                if (operation.Wait(TimeSpan.FromSeconds(2)) == DispatcherOperationStatus.Completed)
+                    shown.Set();
+            }
+        }) { IsBackground = true, Name = "Show requests" };
+        listener.Start();
+    }
+
+    private static void CloseOtherInstances()
+    {
+        int self = Environment.ProcessId;
+        foreach (var process in Process.GetProcessesByName("DiscordVoiceTranslator").Where(p => p.Id != self))
+        {
+            using (process)
+            {
+                try
+                {
+                    process.Kill();
+                    process.WaitForExit(5000);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    // Déjà terminée entre-temps, ou refusée : TryOwnInstance le dira.
+                }
+            }
         }
     }
 
@@ -228,9 +302,10 @@ public partial class App : Application
         if (_ownsInstance)
             SaveSettings();
         // Sur un thread de fond : bloquer le thread de l'interface en attendant des tâches
-        // qui voudraient y revenir provoquerait un blocage à la fermeture.
+        // qui voudraient y revenir provoquerait un blocage à la fermeture. Et jamais plus de
+        // 5 s : un processus qui traîne sans icône garderait la place d'une nouvelle instance.
         if (_engine is not null)
-            Task.Run(() => _engine.DisposeAsync().AsTask()).GetAwaiter().GetResult();
+            Task.Run(() => _engine.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
         if (_ownsInstance)
             _instanceMutex?.ReleaseMutex();
         _instanceMutex?.Dispose();

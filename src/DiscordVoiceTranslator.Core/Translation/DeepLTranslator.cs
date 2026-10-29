@@ -71,13 +71,14 @@ public sealed class DeepLTranslator : ITranslator
         if (response.IsSuccessStatusCode)
             return response;
         response.Dispose();
-        throw new TranslationException((int)response.StatusCode switch
+        int status = (int)response.StatusCode;
+        throw new TranslationException(status switch
         {
             (int)HttpStatusCode.Forbidden => T("DeepL key rejected.", "Clé DeepL refusée."),
             456 => T("DeepL monthly quota used up.", "Quota DeepL du mois épuisé."),
             (int)HttpStatusCode.TooManyRequests => T("Too many DeepL requests, try again in a moment.", "Trop de requêtes DeepL, réessaie dans un instant."),
             int code => T($"DeepL answered with error {code}.", $"DeepL a répondu par une erreur {code}."),
-        });
+        }, keyUnusable: status is (int)HttpStatusCode.Forbidden or 456);
     }
 
     public void Dispose() => _http.Dispose();

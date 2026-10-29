@@ -5,12 +5,12 @@ namespace DiscordVoiceTranslator.Core.Models;
 /// <summary>Un modèle téléchargeable, avec son empreinte pour vérifier qu'il est intact.</summary>
 public sealed record ModelFile(string FileName, string Url, long Size, string Sha256)
 {
-    /// <summary>Whisper large-v3-turbo quantifié 8 bits (whisper.cpp), 834 Mo.</summary>
-    public static ModelFile WhisperTurboQ8 { get; } = new(
-        "ggml-large-v3-turbo-q8_0.bin",
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin",
-        874_188_075,
-        "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1");
+    /// <summary>Déjà téléchargé dans ce dossier (vérifié lors du téléchargement, la taille suffit).</summary>
+    public bool IsDownloaded(string directory)
+    {
+        var info = new FileInfo(Path.Combine(directory, FileName));
+        return info.Exists && info.Length == Size;
+    }
 }
 
 /// <summary>
@@ -27,8 +27,8 @@ public static class ModelDownloader
     public static async Task<string> EnsureAsync(ModelFile model, string directory, Action<double>? progress, CancellationToken cancellationToken)
     {
         string path = Path.Combine(directory, model.FileName);
-        // Déjà vérifié lors de son téléchargement : la taille suffit, pas besoin de relire 834 Mo à chaque lancement.
-        if (File.Exists(path) && new FileInfo(path).Length == model.Size)
+        // Déjà vérifié lors de son téléchargement : la taille suffit, pas besoin de relire des centaines de Mo à chaque lancement.
+        if (model.IsDownloaded(directory))
             return path;
 
         Directory.CreateDirectory(directory);

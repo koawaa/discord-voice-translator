@@ -1,5 +1,7 @@
 using System.IO;
 using System.Text.Json;
+using DiscordVoiceTranslator.Core.Config;
+using DiscordVoiceTranslator.Core.Models;
 
 namespace DiscordVoiceTranslator.App;
 
@@ -74,10 +76,33 @@ internal sealed class TranslationSettings
 
     public bool Enabled { get; set; } = true;
     public string TargetLanguage { get; set; } = "EN-US";
+
+    /// <summary>
+    /// Clés DeepL dans l'ordre d'utilisation, une par ligne dans le même secret chiffré
+    /// (un ancien secret à une seule clé se relit donc tel quel).
+    /// </summary>
+    public static List<string> LoadDeepLKeys() =>
+        SecretStore.Load(DeepLSecretName)?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() ?? [];
+
+    public static void SaveDeepLKeys(IReadOnlyList<string> keys)
+    {
+        if (keys.Count > 0)
+            SecretStore.Save(DeepLSecretName, string.Join('\n', keys));
+        else if (SecretStore.Load(DeepLSecretName) is not null)
+            SecretStore.Delete(DeepLSecretName);
+    }
 }
 
 internal sealed class TranscriptionSettings
 {
+    public const string CustomModel = "custom";
+
+    /// <summary>Modèle Whisper du catalogue (<see cref="WhisperModel.Id"/>), ou « custom » pour <see cref="CustomModelPath"/>.</summary>
+    public string Model { get; set; } = WhisperModel.DefaultId;
+
+    /// <summary>Fichier ggml (.bin) choisi par l'utilisateur.</summary>
+    public string? CustomModelPath { get; set; }
+
     /// <summary>Langues que Whisper a le droit de détecter (codes ISO à deux lettres).</summary>
     public List<string> AllowedLanguages { get; set; } = ["en", "fr", "es", "de"];
 

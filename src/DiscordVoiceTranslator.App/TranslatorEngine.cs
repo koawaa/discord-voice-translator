@@ -31,7 +31,7 @@ internal sealed record DisplayLine(
 /// </summary>
 internal sealed class TranslatorEngine : IAsyncDisposable
 {
-    private static readonly string ModelsDir = Path.Combine(
+    internal static readonly string ModelsDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DiscordVoiceTranslator", "models");
 
     private sealed record TranslationConfig(ITranslator? Translator, TargetLanguage Target, string? DisabledReason);
@@ -66,7 +66,10 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     public async Task StartAsync()
     {
-        string modelPath = await DownloadWhisperModelAsync();
+        // Modèle importé introuvable (déplacé, supprimé) : on retombe sur le modèle par défaut.
+        string modelPath = _transcription.Model == TranscriptionSettings.CustomModel && File.Exists(_transcription.CustomModelPath)
+            ? _transcription.CustomModelPath!
+            : await DownloadWhisperModelAsync(WhisperModel.Find(_transcription.Model).File);
         SetEngineStatus(T("Loading Whisper...", "Chargement de Whisper..."));
         await Task.Run(async () =>
         {
@@ -75,13 +78,23 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             if (!File.Exists(vadPath))
                 vadPath = Path.Combine(ModelsDir, "silero_vad.onnx");
             _vad = new SileroVad(vadPath);
-            _transcriber = new WhisperTranscriber(new WhisperOptions
+            try
             {
-                ModelPath = modelPath,
-                UseGpu = _transcription.UseGpu,
-                AllowedLanguages = _transcription.AllowedLanguages.Count > 0 ? _transcription.AllowedLanguages : ["en"],
-            });
-            await _transcriber.WarmUpAsync(CancellationToken.None);
+                _transcriber = new WhisperTranscriber(new WhisperOptions
+                {
+                    ModelPath = modelPath,
+                    UseGpu = _transcription.UseGpu,
+                    AllowedLanguages = _transcription.AllowedLanguages.Count > 0 ? _transcription.AllowedLanguages : ["en"],
+                });
+                await _transcriber.WarmUpAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // Le plus souvent un modèle trop gros pour la carte graphique, ou un fichier importé qui n'est pas un modèle ggml.
+                throw new InvalidOperationException(
+                    T($"the Whisper model {Path.GetFileName(modelPath)} could not be loaded ({ex.Message}). Pick another model (or a lighter one) in Settings > Transcription.",
+                      $"le modèle Whisper {Path.GetFileName(modelPath)} n'a pas pu être chargé ({ex.Message}). Choisis un autre modèle (ou un plus léger) dans Paramètres > Transcription."), ex);
+            }
         });
 
         var vadOptions = new VadOptions { MinSilenceMs = _transcription.EndOfSentenceSilenceMs };
@@ -108,20 +121,19 @@ internal sealed class TranslatorEngine : IAsyncDisposable
     }
 
     /// <summary>
-    /// Au premier lancement, le modèle Whisper (834 Mo) n'est pas encore là : on le télécharge
-    /// en affichant la progression, et on réessaie tout seul si la connexion coupe.
+    /// Au premier lancement (ou après avoir choisi un autre modèle), le modèle Whisper n'est pas
+    /// encore là : on le télécharge en affichant la progression, et on réessaie tout seul si la connexion coupe.
     /// </summary>
-    private async Task<string> DownloadWhisperModelAsync()
+    private async Task<string> DownloadWhisperModelAsync(ModelFile model)
     {
-        var model = ModelFile.WhisperTurboQ8;
         double mb = model.Size / 1024.0 / 1024;
         while (true)
         {
             try
             {
                 return await ModelDownloader.EnsureAsync(model, ModelsDir, fraction =>
-                    SetEngineStatus(T($"Downloading the speech model (first launch only): {fraction:P0} of {mb:0} MB",
-                                      $"Téléchargement du modèle de reconnaissance (premier lancement seulement) : {fraction:P0} de {mb:0} Mo")),
+                    SetEngineStatus(T($"Downloading the speech model (only once): {fraction:P0} of {mb:0} MB",
+                                      $"Téléchargement du modèle de reconnaissance (une seule fois) : {fraction:P0} de {mb:0} Mo")),
                     _cts.Token);
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
@@ -202,6 +214,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                 if (config.Translator is not null && !config.Target.Matches(result.Language))
                 {
                     var stopwatch = Stopwatch.StartNew();
+                    string nameBefore = config.Translator.Name;
                     try
                     {
                         text = await config.Translator.TranslateAsync(result.Text, result.Language, config.Target.Code, _cts.Token);
@@ -214,6 +227,9 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                         // On affiche quand même le texte d'origine plutôt que de perdre la phrase.
                         UpdateTranslationStatus(ex.Message);
                     }
+                    // Passé à une autre clé : le quota affiché était celui de l'ancienne.
+                    if (config.Translator.Name != nameBefore)
+                        _ = RefreshUsageAsync(config.Translator);
                 }
                 Interlocked.Decrement(ref _translating);
 

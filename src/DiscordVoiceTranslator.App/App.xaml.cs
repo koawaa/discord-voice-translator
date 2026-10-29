@@ -83,7 +83,7 @@ public partial class App : Application
         _engine.StatusChanged += status => Dispatcher.BeginInvoke(() => overlay.SetStatus(status));
         _engine.BusyChanged += busy => Dispatcher.BeginInvoke(() => overlay.SetBusy(busy));
         _engine.LineReady += line => Dispatcher.BeginInvoke(() => ShowLine(overlay, line));
-        ApplyTranslation(SecretStore.Load(TranslationSettings.DeepLSecretName));
+        ApplyTranslation(TranslationSettings.LoadDeepLKeys());
         _engine.ConfigureDiscord(DiscordAppCredentials.Load(), _settings.Discord.SpeakerMarginMs);
 
         // Tout premier lancement : les paramètres expliquent quoi configurer (Discord, DeepL).
@@ -177,7 +177,7 @@ public partial class App : Application
         SaveSettings();
         _overlay?.ApplySettings();
         if (window.TranslationChanged)
-            ApplyTranslation(window.DeepLKey);
+            ApplyTranslation(window.DeepLKeys);
         if (window.DiscordChanged)
             _engine?.ConfigureDiscord(window.Discord, _settings.Discord.SpeakerMarginMs);
         else
@@ -212,17 +212,17 @@ public partial class App : Application
         }
     }
 
-    private void ApplyTranslation(string? deepLKey)
+    private void ApplyTranslation(IReadOnlyList<string> deepLKeys)
     {
         if (_engine is null)
             return;
         var target = TargetLanguage.Find(_settings.Translation.TargetLanguage);
         if (!_settings.Translation.Enabled)
             _engine.ConfigureTranslation(null, target, T("Translation off (Settings > General)", "Traduction désactivée (Paramètres > Général)"));
-        else if (deepLKey is null)
+        else if (deepLKeys.Count == 0)
             _engine.ConfigureTranslation(null, target, T("Translation: no DeepL key (Settings > DeepL)", "Traduction : pas de clé DeepL (Paramètres > DeepL)"));
         else
-            _engine.ConfigureTranslation(new DeepLTranslator(deepLKey), target);
+            _engine.ConfigureTranslation(new FailoverTranslator("DeepL", deepLKeys.Select(key => (ITranslator)new DeepLTranslator(key)).ToList()), target);
     }
 
     private void ShowLine(OverlayWindow overlay, DisplayLine line)

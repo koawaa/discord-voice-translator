@@ -261,6 +261,41 @@
             </Setter>
         </Style>
 
+        <!-- Carte à choix unique, pour le modèle Whisper. -->
+        <Style x:Key="Option" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" CornerRadius="8" Padding="12,10" Background="{StaticResource InputBrush}"
+                                BorderThickness="1" BorderBrush="{StaticResource LineBrush}">
+                            <DockPanel>
+                                <Grid Width="18" Height="18" Margin="0,1,12,0" VerticalAlignment="Top">
+                                    <Ellipse x:Name="Ring" Stroke="{StaticResource SwitchOffBrush}" StrokeThickness="2" />
+                                    <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                                </Grid>
+                                <ContentPresenter />
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource LineHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Champs de saisie -->
         <Style TargetType="TextBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
@@ -760,6 +795,28 @@
                             </DockPanel>
                         </Border>
 
+                        <TextBlock Style="{StaticResource Section}" Text="{local:Tr En='SPEECH MODEL', Fr='MODÈLE DE RECONNAISSANCE'}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
+                                           Text="{local:Tr En='A bigger model makes fewer mistakes, but uses more video memory and takes longer for each sentence. A new model is downloaded once, at the next start.', Fr='Un modèle plus gros fait moins d’erreurs, mais prend plus de mémoire vidéo et plus de temps pour chaque phrase. Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.'}" />
+                                <StackPanel x:Name="ModelsPanel" />
+                                <RadioButton x:Name="CustomModelOption" Style="{StaticResource Option}" GroupName="Model" Margin="0">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource Label}" Text="{local:Tr En='My own model file', Fr='Mon propre fichier de modèle'}" />
+                                        <TextBlock Style="{StaticResource Hint}"
+                                                   Text="{local:Tr En='A Whisper model in whisper.cpp format (ggml .bin), for example one fine-tuned for your language.', Fr='Un modèle Whisper au format whisper.cpp (ggml .bin), par exemple un modèle affiné pour ta langue.'}" />
+                                        <DockPanel Margin="0,10,0,0">
+                                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="BrowseModel_Click"
+                                                    Content="{local:Tr En='Browse...', Fr='Parcourir...'}" />
+                                            <TextBlock x:Name="CustomModelPathText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                </RadioButton>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Style="{StaticResource Section}" Text="{local:Tr En=LANGUAGES, Fr=LANGUES}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
@@ -815,14 +872,60 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Style="{StaticResource Section}" Text="{local:Tr En='API KEY', Fr='CLÉ API'}" />
+                        <TextBlock Style="{StaticResource Section}" Text="{local:Tr En='API KEYS', Fr='CLÉS API'}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Label}" Margin="0,0,0,8" Text="{local:Tr En='DeepL API key', Fr='Clé API DeepL'}" />
-                                <PasswordBox x:Name="DeepLKeyBox" />
-                                <TextBlock x:Name="DeepLKeyHint" Style="{StaticResource Hint}" />
+                                <TextBlock Style="{StaticResource Body}"
+                                           Text="{local:Tr En='Keys are used from top to bottom. When the monthly quota of one runs out, the next one takes over automatically.', Fr='Les clés servent de haut en bas. Quand le quota du mois de l’une est épuisé, la suivante prend le relais automatiquement.'}" />
+
+                                <ItemsControl x:Name="KeysList" Margin="0,12,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource InputBrush}" CornerRadius="6" Padding="12,8,8,8" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Width="24" Height="24" CornerRadius="12" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Number}" Foreground="{StaticResource AccentBrush}" FontWeight="Bold" FontSize="12"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Masked}" FontFamily="Consolas" FontSize="13" />
+                                                        <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="2" Padding="9" Background="Transparent" VerticalAlignment="Center"
+                                                            Click="RemoveKey_Click" ToolTip="{local:Tr En='Remove this key', Fr='Retirer cette clé'}">
+                                                        <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="13" />
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="NoKeysText" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                           Text="{local:Tr En='No key yet.', Fr='Aucune clé pour l’instant.'}" />
+
+                                <TextBlock Style="{StaticResource Label}" Margin="0,10,0,8" Text="{local:Tr En='Add a key', Fr='Ajouter une clé'}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <PasswordBox x:Name="DeepLKeyBox" />
+                                    <Button x:Name="AddKeyButton" Grid.Column="1" Margin="8,0,0,0" Click="AddKey_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <TextBlock Text="{local:Tr En='Add', Fr='Ajouter'}" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="{local:Tr En='Each key is checked before being added, then encrypted with your Windows account (DPAPI).', Fr='Chaque clé est vérifiée avant d’être ajoutée, puis chiffrée avec ton compte Windows (DPAPI).'}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                                    <Button x:Name="CheckKeyButton" Content="{local:Tr En='Check the key', Fr='Vérifier la clé'}" Click="CheckKey_Click" />
+                                    <Button x:Name="CheckKeyButton" Content="{local:Tr En='Check the keys', Fr='Vérifier les clés'}" Click="CheckKey_Click" />
                                     <TextBlock x:Name="DeepLResult" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
                             </StackPanel>

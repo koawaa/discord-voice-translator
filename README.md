@@ -19,7 +19,7 @@ overlay on top of your games, with the name and avatar of whoever is talking.
 - **Windows 11** (64-bit). Windows 10 cannot capture the sound of a single app.
 - The **Discord desktop app** (the browser version does not work).
 - A **graphics card** is recommended (NVIDIA or AMD, about 1 GB of video memory). It also runs on the processor, but much slower.
-- About **1 GB of free space**, and internet on the first launch (the speech model is 834 MB).
+- About **1 GB of free space**, and internet on the first launch (the default speech model is 834 MB).
 
 ### Install
 
@@ -42,7 +42,8 @@ Without this step, subtitles still work, but each line shows the language instea
 **Translation (DeepL tab in Settings)**
 
 1. Get a free key at [deepl.com/pro-api](https://www.deepl.com/pro-api) (choose **DeepL API Free**). Your key is on your account page and ends with `:fx`.
-2. Paste it in the **DeepL** tab, click **Check the key**, then **Save**.
+2. Paste it in the **DeepL** tab, click **Add**, then **Save**.
+   You can add several keys: they are used from top to bottom, and when the monthly quota of one runs out, the next one takes over automatically.
 3. Choose the language to translate into in the **General** tab (English by default).
 
 ### Everyday use
@@ -52,6 +53,7 @@ Without this step, subtitles still work, but each line shows the language instea
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
+- **Settings → Transcription → Speech model**: from *Light* (modest PC) to *Maximum* (powerful graphics card), or your own Whisper model file (ggml `.bin`). Bigger models make fewer mistakes but are slower; a new model is downloaded once, at the next start.
 - **Settings → General → Status** shows what the app is doing: graphics card used, memory, delay, DeepL quota, Discord connection.
 
 ### Privacy
@@ -83,7 +85,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.1.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.0
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -106,7 +108,7 @@ overlay par-dessus tes jeux, avec le pseudo et l'avatar de la personne qui parle
 - **Windows 11** (64 bits). Windows 10 ne sait pas capter le son d'un seul programme.
 - L'**application Discord pour PC** (la version navigateur ne marche pas).
 - Une **carte graphique** est recommandée (NVIDIA ou AMD, environ 1 Go de mémoire vidéo). L'appli tourne aussi sur le processeur, mais bien plus lentement.
-- Environ **1 Go d'espace libre**, et internet au premier lancement (le modèle de reconnaissance fait 834 Mo).
+- Environ **1 Go d'espace libre**, et internet au premier lancement (le modèle de reconnaissance par défaut fait 834 Mo).
 
 ### Installation
 
@@ -131,7 +133,8 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 **Traduction (onglet DeepL des paramètres)**
 
 1. Crée une clé gratuite sur [deepl.com/pro-api](https://www.deepl.com/pro-api) (choisis **DeepL API Free**). Ta clé est sur la page de ton compte et finit par `:fx`.
-2. Colle-la dans l'onglet **DeepL**, clique sur **Vérifier la clé**, puis enregistre.
+2. Colle-la dans l'onglet **DeepL**, clique sur **Ajouter**, puis enregistre.
+   Tu peux ajouter plusieurs clés : elles servent de haut en bas, et quand le quota du mois de l'une est épuisé, la suivante prend le relais automatiquement.
 3. Choisis la langue de traduction dans l'onglet **Général** (anglais par défaut).
 
 ### Au quotidien
@@ -140,6 +143,7 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
+- **Paramètres → Transcription → Modèle de reconnaissance** : de *Léger* (PC modeste) à *Maximum* (carte graphique puissante), ou ton propre fichier de modèle Whisper (ggml `.bin`). Plus le modèle est gros, moins il fait d'erreurs, mais plus il est lent ; un nouveau modèle est téléchargé une seule fois, au prochain démarrage.
 - **Paramètres → Général → État** montre ce que fait l'appli : carte graphique utilisée, mémoire, délai, quota DeepL, connexion Discord.
 
 ### Confidentialité
@@ -171,7 +175,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.1.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.2.0
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

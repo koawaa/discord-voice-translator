@@ -1,4 +1,7 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -7,6 +10,7 @@ using System.Windows.Navigation;
 using System.Windows.Threading;
 using DiscordVoiceTranslator.Core.Config;
 using DiscordVoiceTranslator.Core.Discord;
+using DiscordVoiceTranslator.Core.Models;
 using DiscordVoiceTranslator.Core.Translation;
 using static DiscordVoiceTranslator.Core.Localization.UiText;
 
@@ -20,14 +24,16 @@ public partial class SettingsWindow : Window
 {
     private readonly AppSettings _settings;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly string? _storedDeepLKey = SecretStore.Load(TranslationSettings.DeepLSecretName);
+    private readonly List<string> _storedDeepLKeys = TranslationSettings.LoadDeepLKeys();
+    private readonly ObservableCollection<KeyRow> _keys = [];
     private readonly DiscordAppCredentials? _storedDiscord = DiscordAppCredentials.Load();
     private bool _forgotAuthorization;
+    private string? _customModelPath;
 
     internal bool TranslationChanged { get; private set; }
     internal bool DiscordChanged { get; private set; }
     internal bool RestartNeeded { get; private set; }
-    internal string? DeepLKey { get; private set; }
+    internal IReadOnlyList<string> DeepLKeys { get; private set; } = [];
     internal DiscordAppCredentials? Discord { get; private set; }
 
     /// <summary>« Remettre l'overlay en bas au centre » : appliqué tout de suite.</summary>
@@ -67,9 +73,40 @@ public partial class SettingsWindow : Window
         SilenceSlider.Value = settings.Transcription.EndOfSentenceSilenceMs;
         UseGpuBox.IsChecked = settings.Transcription.UseGpu;
 
-        DeepLKeyHint.Text = _storedDeepLKey is null
-            ? T("It will be encrypted with your Windows account (DPAPI).", "Elle sera chiffrée avec ton compte Windows (DPAPI).")
-            : T("A key is saved (encrypted). Leave empty to keep it.", "Une clé est enregistrée (chiffrée). Laisse vide pour la garder.");
+        bool custom = settings.Transcription.Model == TranscriptionSettings.CustomModel;
+        string selectedModel = WhisperModel.Find(settings.Transcription.Model).Id;
+        foreach (var model in WhisperModel.All)
+        {
+            var content = new StackPanel { Children =
+            {
+                new TextBlock { Text = model.DisplayName, Style = (Style)FindResource("Label") },
+                new TextBlock { Text = model.Details, Style = (Style)FindResource("Hint") },
+            } };
+            if (model.File.IsDownloaded(TranslatorEngine.ModelsDir))
+            {
+                var downloaded = new TextBlock { FontSize = 12, Margin = new Thickness(0, 4, 0, 0), Foreground = ThemeBrush("SuccessBrush") };
+                downloaded.Inlines.Add(new System.Windows.Documents.Run("  ") { FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 10 });
+                downloaded.Inlines.Add(new System.Windows.Documents.Run(T("Already downloaded", "Déjà téléchargé")));
+                content.Children.Add(downloaded);
+            }
+            ModelsPanel.Children.Add(new RadioButton
+            {
+                Style = (Style)FindResource("Option"),
+                GroupName = "Model",
+                Tag = model.Id,
+                IsChecked = !custom && model.Id == selectedModel,
+                Content = content,
+            });
+        }
+        CustomModelOption.IsChecked = custom;
+        _customModelPath = settings.Transcription.CustomModelPath;
+        ShowCustomModelPath();
+
+        foreach (string key in _storedDeepLKeys)
+            _keys.Add(new KeyRow(key) { Status = T("Saved (encrypted)", "Enregistrée (chiffrée)"), StatusBrush = ThemeBrush("TextMutedBrush") });
+        KeysList.ItemsSource = _keys;
+        _keys.CollectionChanged += (_, _) => RefreshKeys();
+        RefreshKeys();
         ClientIdBox.Text = _storedDiscord?.ClientId ?? "";
         ClientSecretHint.Text = _storedDiscord is null
             ? T("It will be encrypted with your Windows account (DPAPI).", "Il sera chiffré avec ton compte Windows (DPAPI).")
@@ -96,6 +133,14 @@ public partial class SettingsWindow : Window
             Fail(TranscriptionTab, T("Tick at least one language.", "Coche au moins une langue."));
             return;
         }
+        string model = CustomModelOption.IsChecked == true
+            ? TranscriptionSettings.CustomModel
+            : ModelsPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? WhisperModel.DefaultId;
+        if (model == TranscriptionSettings.CustomModel && !File.Exists(_customModelPath))
+        {
+            Fail(TranscriptionTab, T("Choose your model file, or pick another model.", "Choisis ton fichier de modèle, ou un autre modèle."));
+            return;
+        }
 
         string clientId = ClientIdBox.Text.Trim();
         string? typedSecret = Typed(ClientSecretBox.Password);
@@ -117,30 +162,31 @@ public partial class SettingsWindow : Window
             discord = new DiscordAppCredentials(clientId, secret);
         }
 
-        bool translate = TranslateBox.IsChecked == true;
-        string? typedKey = Typed(DeepLKeyBox.Password);
-        string? key = typedKey ?? _storedDeepLKey;
-        if (translate && key is null)
-        {
-            Fail(DeepLTab, T("Enter a DeepL key, or untick \"Translate\" in General.", "Entre une clé DeepL, ou décoche « Traduire » dans Général."));
-            return;
-        }
-        if (typedKey is not null)
+        // Une clé collée sans cliquer sur « Ajouter » : on l'ajoute plutôt que de la perdre.
+        if (Typed(DeepLKeyBox.Password) is not null)
         {
             SaveButton.IsEnabled = false;
             ShowInfo(T("Checking the DeepL key...", "Vérification de la clé DeepL..."));
-            var (ok, message) = await CheckDeepLKeyAsync(typedKey);
+            string? error = await AddTypedKeyAsync();
             SaveButton.IsEnabled = true;
-            if (!ok)
+            if (error is not null)
             {
-                Fail(DeepLTab, message);
+                Fail(DeepLTab, error);
                 return;
             }
         }
+        bool translate = TranslateBox.IsChecked == true;
+        var keys = _keys.Select(row => row.Key).ToList();
+        if (translate && keys.Count == 0)
+        {
+            Fail(DeepLTab, T("Add a DeepL key, or untick \"Translate\" in General.", "Ajoute une clé DeepL, ou décoche « Traduire » dans Général."));
+            return;
+        }
 
         // 2. Secrets.
-        if (typedKey is not null)
-            SecretStore.Save(TranslationSettings.DeepLSecretName, typedKey);
+        bool keysChanged = !keys.SequenceEqual(_storedDeepLKeys);
+        if (keysChanged)
+            TranslationSettings.SaveDeepLKeys(keys);
         DiscordChanged = discord != _storedDiscord || _forgotAuthorization;
         if (discord != _storedDiscord)
         {
@@ -161,8 +207,10 @@ public partial class SettingsWindow : Window
         RestartNeeded = uiLanguage != _settings.UiLanguage
             || !allowed.SequenceEqual(transcription.AllowedLanguages)
             || silence != transcription.EndOfSentenceSilenceMs
-            || useGpu != transcription.UseGpu;
-        TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage || typedKey is not null;
+            || useGpu != transcription.UseGpu
+            || model != transcription.Model
+            || (model == TranscriptionSettings.CustomModel && _customModelPath != transcription.CustomModelPath);
+        TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage || keysChanged;
 
         _settings.UiLanguage = uiLanguage;
         _settings.Translation.Enabled = translate;
@@ -176,29 +224,100 @@ public partial class SettingsWindow : Window
         transcription.AllowedLanguages = allowed;
         transcription.EndOfSentenceSilenceMs = silence;
         transcription.UseGpu = useGpu;
+        transcription.Model = model;
+        transcription.CustomModelPath = _customModelPath;
         _settings.Discord.SpeakerMarginMs = (int)MarginSlider.Value;
 
-        DeepLKey = translate ? key : null;
+        DeepLKeys = translate ? keys : [];
         Discord = discord;
         DialogResult = true;
     }
 
+    private void BrowseModel_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = T("Whisper model file", "Fichier de modèle Whisper"),
+            Filter = T("Whisper model (ggml)|*.bin|All files|*.*", "Modèle Whisper (ggml)|*.bin|Tous les fichiers|*.*"),
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        _customModelPath = dialog.FileName;
+        CustomModelOption.IsChecked = true;
+        ShowCustomModelPath();
+    }
+
+    private void ShowCustomModelPath()
+    {
+        CustomModelPathText.Text = _customModelPath ?? T("No file chosen", "Aucun fichier choisi");
+        CustomModelPathText.ToolTip = _customModelPath;
+    }
+
+    private async void AddKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (Typed(DeepLKeyBox.Password) is null)
+        {
+            ShowKeyError(T("Paste a key first.", "Colle d'abord une clé."));
+            return;
+        }
+        AddKeyButton.IsEnabled = false;
+        DeepLResult.Foreground = ThemeBrush("TextMutedBrush");
+        DeepLResult.Text = T("Checking...", "Vérification...");
+        string? error = await AddTypedKeyAsync();
+        AddKeyButton.IsEnabled = true;
+        if (error is null) DeepLResult.Text = "";
+        else ShowKeyError(error);
+    }
+
+    /// <summary>Vérifie la clé collée et l'ajoute en bas de la liste ; renvoie l'erreur sinon.</summary>
+    private async Task<string?> AddTypedKeyAsync()
+    {
+        string key = Typed(DeepLKeyBox.Password)!;
+        if (_keys.Any(row => row.Key == key))
+            return T("This key is already in the list.", "Cette clé est déjà dans la liste.");
+        var (ok, message) = await CheckDeepLKeyAsync(key);
+        if (!ok)
+            return message;
+        _keys.Add(new KeyRow(key) { Status = message, StatusBrush = ThemeBrush("SuccessBrush") });
+        DeepLKeyBox.Clear();
+        return null;
+    }
+
+    private void RemoveKey_Click(object sender, RoutedEventArgs e) =>
+        _keys.Remove((KeyRow)((FrameworkElement)sender).DataContext);
+
     private async void CheckKey_Click(object sender, RoutedEventArgs e)
     {
-        string? key = Typed(DeepLKeyBox.Password) ?? _storedDeepLKey;
-        if (key is null)
+        if (_keys.Count == 0)
         {
-            DeepLResult.Foreground = ThemeBrush("DangerBrush");
-            DeepLResult.Text = T("Paste a key first.", "Colle d'abord une clé.");
+            ShowKeyError(T("Add a key first.", "Ajoute d'abord une clé."));
             return;
         }
         CheckKeyButton.IsEnabled = false;
-        DeepLResult.Foreground = ThemeBrush("TextMutedBrush");
-        DeepLResult.Text = T("Checking...", "Vérification...");
-        var (ok, message) = await CheckDeepLKeyAsync(key);
-        DeepLResult.Foreground = ThemeBrush(ok ? "SuccessBrush" : "DangerBrush");
-        DeepLResult.Text = message;
+        DeepLResult.Text = "";
+        foreach (var row in _keys.ToList())
+        {
+            row.Status = T("Checking...", "Vérification...");
+            row.StatusBrush = ThemeBrush("TextMutedBrush");
+            var (ok, message) = await CheckDeepLKeyAsync(row.Key);
+            row.Status = message;
+            row.StatusBrush = ThemeBrush(ok ? "SuccessBrush" : "DangerBrush");
+        }
         CheckKeyButton.IsEnabled = true;
+    }
+
+    private void ShowKeyError(string message)
+    {
+        DeepLResult.Foreground = ThemeBrush("DangerBrush");
+        DeepLResult.Text = message;
+    }
+
+    // Numéros 1, 2, 3... dans l'ordre d'utilisation.
+    private void RefreshKeys()
+    {
+        for (int i = 0; i < _keys.Count; i++)
+            _keys[i].Number = i + 1;
+        NoKeysText.Visibility = _keys.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // Consulter le quota ne consomme aucun caractère : c'est la bonne façon de tester une clé.
@@ -210,6 +329,9 @@ public partial class SettingsWindow : Window
             var usage = await translator.GetUsageAsync(CancellationToken.None);
             return (true, usage is null
                 ? T("Valid key.", "Clé valide.")
+                : usage.CharactersUsed >= usage.CharacterLimit
+                ? T($"Valid key, but this month's quota is used up ({usage.CharacterLimit:N0} characters)",
+                    $"Clé valide, mais le quota du mois est épuisé ({usage.CharacterLimit:N0} caractères)")
                 : T($"Valid key · {usage.CharactersUsed:N0} / {usage.CharacterLimit:N0} characters used this month",
                     $"Clé valide · {usage.CharactersUsed:N0} / {usage.CharacterLimit:N0} caractères utilisés ce mois"));
         }
@@ -251,4 +373,31 @@ public partial class SettingsWindow : Window
     private Brush ThemeBrush(string key) => (Brush)FindResource(key);
 
     private static string? Typed(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Une ligne de la liste des clés DeepL : la clé n'est jamais affichée en entier.</summary>
+    private sealed class KeyRow(string key) : INotifyPropertyChanged
+    {
+        private int _number;
+        private string _status = "";
+        private Brush? _statusBrush;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public string Key { get; } = key;
+
+        private bool IsFree => Key.EndsWith(":fx", StringComparison.Ordinal);
+
+        // Assez pour reconnaître la clé sur la page du compte DeepL, pas pour la réutiliser.
+        public string Masked => "••••••••" + Key[Math.Max(0, Key.Length - (IsFree ? 7 : 4))..] + (IsFree ? "  ·  Free" : "  ·  Pro");
+
+        public int Number { get => _number; set => Set(ref _number, value, nameof(Number)); }
+        public string Status { get => _status; set => Set(ref _status, value, nameof(Status)); }
+        public Brush? StatusBrush { get => _statusBrush; set => Set(ref _statusBrush, value, nameof(StatusBrush)); }
+
+        private void Set<TValue>(ref TValue field, TValue value, string name)
+        {
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+    }
 }

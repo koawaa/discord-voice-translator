@@ -3,7 +3,11 @@ using static DiscordVoiceTranslator.Core.Localization.UiText;
 namespace DiscordVoiceTranslator.Core.Translation;
 
 /// <summary>Erreur de traduction avec un message lisible tel quel par l'utilisateur.</summary>
-public sealed class TranslationException(string message, Exception? inner = null) : Exception(message, inner);
+public sealed class TranslationException(string message, Exception? inner = null, bool keyUnusable = false) : Exception(message, inner)
+{
+    /// <summary>Clé refusée ou quota épuisé : une autre clé peut prendre le relais.</summary>
+    public bool KeyUnusable { get; } = keyUnusable;
+}
 
 public sealed record TranslatorUsage(long CharactersUsed, long CharacterLimit);
 

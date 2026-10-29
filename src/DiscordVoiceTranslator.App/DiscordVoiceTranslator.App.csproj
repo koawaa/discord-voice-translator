@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <!-- Uniquement pour l'icône de la zone de notification (WPF n'en a pas). -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>DiscordVoiceTranslator</AssemblyName>
+    <RootNamespace>DiscordVoiceTranslator.App</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Product>Discord Voice Translator</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Silero VAD (2 Mo, licence MIT) est livré avec l'appli ; Whisper (834 Mo) est téléchargé au premier lancement. -->
+    <Content Include="Models\silero_vad.onnx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Sinon Color, Brush, Application... deviennent ambigus entre WPF et Windows Forms. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DiscordVoiceTranslator.Core\DiscordVoiceTranslator.Core.csproj" />
+  </ItemGroup>
+
+</Project>

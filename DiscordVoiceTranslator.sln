@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{766DEE71-A085-430F-A9A2-D3FDC3D8A229}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiscordVoiceTranslator.Core", "src\DiscordVoiceTranslator.Core\DiscordVoiceTranslator.Core.csproj", "{667A6105-68BD-4BFF-870C-08B4AFFF7667}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{CEA9B4F8-622E-4536-8D6D-275ADA0BC804}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TranscribeTest", "tools\TranscribeTest\TranscribeTest.csproj", "{B020E3AA-4501-4091-B937-BA903FBAD8C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiscordVoiceTranslator.App", "src\DiscordVoiceTranslator.App\DiscordVoiceTranslator.App.csproj", "{F1A33B34-CC68-4B2C-B821-A6AF25D8C336}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{667A6105-68BD-4BFF-870C-08B4AFFF7667}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{667A6105-68BD-4BFF-870C-08B4AFFF7667}.Debug|Any CPU.Build.0 = Debug|x64
+		{667A6105-68BD-4BFF-870C-08B4AFFF7667}.Release|Any CPU.ActiveCfg = Release|x64
+		{667A6105-68BD-4BFF-870C-08B4AFFF7667}.Release|Any CPU.Build.0 = Release|x64
+		{B020E3AA-4501-4091-B937-BA903FBAD8C2}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{B020E3AA-4501-4091-B937-BA903FBAD8C2}.Debug|Any CPU.Build.0 = Debug|x64
+		{B020E3AA-4501-4091-B937-BA903FBAD8C2}.Release|Any CPU.ActiveCfg = Release|x64
+		{B020E3AA-4501-4091-B937-BA903FBAD8C2}.Release|Any CPU.Build.0 = Release|x64
+		{F1A33B34-CC68-4B2C-B821-A6AF25D8C336}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{F1A33B34-CC68-4B2C-B821-A6AF25D8C336}.Debug|Any CPU.Build.0 = Debug|x64
+		{F1A33B34-CC68-4B2C-B821-A6AF25D8C336}.Release|Any CPU.ActiveCfg = Release|x64
+		{F1A33B34-CC68-4B2C-B821-A6AF25D8C336}.Release|Any CPU.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{667A6105-68BD-4BFF-870C-08B4AFFF7667} = {766DEE71-A085-430F-A9A2-D3FDC3D8A229}
+		{B020E3AA-4501-4091-B937-BA903FBAD8C2} = {CEA9B4F8-622E-4536-8D6D-275ADA0BC804}
+		{F1A33B34-CC68-4B2C-B821-A6AF25D8C336} = {766DEE71-A085-430F-A9A2-D3FDC3D8A229}
+	EndGlobalSection
+EndGlobal

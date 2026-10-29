@@ -17,6 +17,8 @@ public partial class App : Application
     private const string InstanceMutexName = @"Local\DiscordVoiceTranslator";
     private const string ShowRequestName = @"Local\DiscordVoiceTranslator.ShowRequest";
     private const string ShowDoneName = @"Local\DiscordVoiceTranslator.ShowDone";
+    // Signalé par l'installateur avant une mise à jour ou une désinstallation.
+    private const string QuitRequestName = @"Local\DiscordVoiceTranslator.Quit";
 
     private readonly AppSettings _settings = AppSettings.Load();
     private Mutex? _instanceMutex;
@@ -66,7 +68,7 @@ public partial class App : Application
         overlay.GeometryChanged += SaveSettings;
         overlay.Show();
 
-        ListenForShowRequests(overlay);
+        ListenForRequests(overlay);
 
         _tray = new TrayIcon();
         _tray.EditModeRequested += overlay.ToggleEditMode;
@@ -131,15 +133,24 @@ public partial class App : Application
         return shown.WaitOne(TimeSpan.FromSeconds(3));
     }
 
-    /// <summary>Côté instance lancée : se montre en mode édition quand une autre le demande.</summary>
-    private void ListenForShowRequests(OverlayWindow overlay)
+    /// <summary>
+    /// Côté instance lancée : se montre en mode édition quand une autre le demande, et quitte
+    /// proprement (réglages enregistrés, icône retirée) quand l'installateur le demande.
+    /// </summary>
+    private void ListenForRequests(OverlayWindow overlay)
     {
         var request = new EventWaitHandle(false, EventResetMode.AutoReset, ShowRequestName);
         var shown = new EventWaitHandle(false, EventResetMode.AutoReset, ShowDoneName);
+        var quit = new EventWaitHandle(false, EventResetMode.AutoReset, QuitRequestName);
         var listener = new Thread(() =>
         {
-            while (request.WaitOne())
+            while (true)
             {
+                if (WaitHandle.WaitAny([request, quit]) == 1)
+                {
+                    Dispatcher.BeginInvoke(() => Shutdown());
+                    return;
+                }
                 // On ne répond qu'une fois l'overlay réellement affiché : si l'interface est
                 // bloquée, l'autre instance le saura (pas de réponse) et prendra la relève.
                 var operation = Dispatcher.BeginInvoke(overlay.ShowForEditing);

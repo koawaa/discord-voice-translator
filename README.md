@@ -29,6 +29,8 @@ add a game with voice chat (CS2, War Dogs...) or any other app that plays voices
 3. Click through the installer (no admin rights needed). The app starts at the end.
 4. On the first launch, the app downloads the speech model (progress is shown in the overlay) and opens its **Settings**.
 
+**Updating:** download the new installer and run it, no need to uninstall first. It closes the app if it is open, installs over the old version and keeps your settings, API keys and downloaded speech models.
+
 ### Setup (5 minutes, once)
 
 **Show who is talking (Discord tab in Settings)**
@@ -79,8 +81,8 @@ Without this step, subtitles still work, but each line shows the language instea
 ### Uninstall
 
 **Windows Settings → Apps → Installed apps → Discord Voice Translator → Uninstall.** This removes
-the app and the speech model. Your settings and encrypted keys stay in
-`%APPDATA%\DiscordVoiceTranslator`; delete that folder to remove them too.
+the app and the speech models. At the end it asks whether to also delete your settings and encrypted
+keys (`%APPDATA%\DiscordVoiceTranslator`); keep them if you plan to reinstall.
 
 ### Build from source
 
@@ -120,6 +122,8 @@ ajouter un jeu avec un chat vocal (CS2, War Dogs...) ou n'importe quelle autre a
 2. Lance-le. Windows peut afficher **« Windows a protégé votre ordinateur »** : l'appli n'est pas signée (un certificat est payant). Clique sur **Informations complémentaires**, puis **Exécuter quand même**.
 3. Suis l'installateur (pas besoin de droits administrateur). L'appli démarre à la fin.
 4. Au premier lancement, l'appli télécharge le modèle de reconnaissance (la progression s'affiche dans l'overlay) et ouvre ses **paramètres**.
+
+**Mise à jour :** télécharge le nouvel installateur et lance-le, sans désinstaller avant. Il ferme l'appli si elle est ouverte, s'installe par-dessus l'ancienne version et garde tes réglages, clés API et modèles de reconnaissance téléchargés.
 
 ### Réglages (5 minutes, une seule fois)
 
@@ -172,8 +176,8 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 ### Désinstallation
 
 **Paramètres Windows → Applications → Applications installées → Discord Voice Translator → Désinstaller.**
-Cela retire l'appli et le modèle de reconnaissance. Tes réglages et clés chiffrées restent dans
-`%APPDATA%\DiscordVoiceTranslator` ; supprime ce dossier pour les effacer aussi.
+Cela retire l'appli et les modèles de reconnaissance. À la fin, il te demande s'il faut aussi effacer tes réglages
+et clés chiffrées (`%APPDATA%\DiscordVoiceTranslator`) ; garde-les si tu comptes réinstaller.
 
 ### Compiler depuis les sources
 

@@ -54,6 +54,9 @@ internal sealed class AppSettings
 
 internal sealed class OverlaySettings
 {
+    /// <summary>Style des lignes (<see cref="SubtitleTheme.Id"/>).</summary>
+    public string Theme { get; set; } = SubtitleTheme.DefaultId;
+
     public string FontFamily { get; set; } = "Segoe UI";
     public double FontSize { get; set; } = 20;
 

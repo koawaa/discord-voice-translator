@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Navigation;
@@ -22,7 +23,11 @@ namespace DiscordVoiceTranslator.App;
 /// </summary>
 public partial class SettingsWindow : Window
 {
+    // Faux décor de jeu derrière les aperçus : on y juge le contraste mieux que sur le gris de la fenêtre.
+    private static readonly Brush PreviewBackdrop = CreatePreviewBackdrop();
+
     private readonly AppSettings _settings;
+    private readonly List<(SubtitleTheme Theme, Border Preview)> _themePreviews = [];
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly List<string> _storedDeepLKeys = TranslationSettings.LoadDeepLKeys();
     private readonly ObservableCollection<KeyRow> _keys = [];
@@ -67,6 +72,47 @@ public partial class SettingsWindow : Window
         OpacitySlider.Value = settings.Overlay.BackgroundOpacity * 100;
         LinesSlider.Value = settings.Overlay.MaxLines;
         DurationSlider.Value = settings.Overlay.DisplaySeconds;
+
+        string selectedTheme = SubtitleTheme.Find(settings.Overlay.Theme).Id;
+        foreach (var theme in SubtitleTheme.All)
+        {
+            var preview = new Border
+            {
+                Height = 110,
+                Margin = new Thickness(0, 10, 0, 0),
+                Padding = new Thickness(8),
+                CornerRadius = new CornerRadius(6),
+                Background = PreviewBackdrop,
+                ClipToBounds = true,
+            };
+            _themePreviews.Add((theme, preview));
+            ThemesPanel.Children.Add(new RadioButton
+            {
+                Style = (Style)FindResource("Option"),
+                GroupName = "Theme",
+                Tag = theme.Id,
+                IsChecked = theme.Id == selectedTheme,
+                Margin = new Thickness(0, 0, 8, 8),
+                // Aperçu calé en bas : ils restent alignés même si les descriptions n'ont pas la même longueur.
+                Content = new DockPanel
+                {
+                    Children =
+                    {
+                        Docked(preview, Dock.Bottom),
+                        new StackPanel { Children =
+                        {
+                            new TextBlock { Text = theme.DisplayName, Style = (Style)FindResource("Label") },
+                            new TextBlock { Text = theme.Details, Style = (Style)FindResource("Hint") },
+                        } },
+                    },
+                },
+            });
+        }
+        RefreshThemePreviews();
+        FontBox.SelectionChanged += (_, _) => RefreshThemePreviews();
+        OpacitySlider.ValueChanged += (_, _) => RefreshThemePreviews();
+        ShowOriginalBox.Checked += (_, _) => RefreshThemePreviews();
+        ShowOriginalBox.Unchecked += (_, _) => RefreshThemePreviews();
 
         foreach (var (code, english, french) in SpokenLanguages.All)
         {
@@ -222,6 +268,7 @@ public partial class SettingsWindow : Window
         _settings.Translation.Enabled = translate;
         _settings.Translation.TargetLanguage = target;
         _settings.Overlay.ShowOriginal = ShowOriginalBox.IsChecked == true;
+        _settings.Overlay.Theme = ThemesPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? SubtitleTheme.DefaultId;
         _settings.Overlay.FontFamily = (string)FontBox.SelectedItem;
         _settings.Overlay.FontSize = FontSizeSlider.Value;
         _settings.Overlay.BackgroundOpacity = OpacitySlider.Value / 100;
@@ -379,6 +426,26 @@ public partial class SettingsWindow : Window
 
     private void ResetPosition_Click(object sender, RoutedEventArgs e) => ResetPositionRequested?.Invoke();
 
+    // Une même phrase dans chaque thème, avec la police, l'opacité et l'original choisis plus bas.
+    private void RefreshThemePreviews()
+    {
+        var mia = new OverlaySpeaker("Mia", SpeakerColors.For("Mia"), null);
+        string? original = ShowOriginalBox.IsChecked == true ? "¡Bien hecho, vamos al punto B!" : null;
+        foreach (var (theme, preview) in _themePreviews)
+        {
+            var line = theme.BuildLine([mia], T("Nice one, let's take point B!", "Bien joué, on prend le point B !"), original, 14, OpacitySlider.Value / 100);
+            line.VerticalAlignment = VerticalAlignment.Center;
+            TextElement.SetFontFamily(preview, new FontFamily((string)FontBox.SelectedItem));
+            preview.Child = line;
+        }
+    }
+
+    private static UIElement Docked(UIElement element, Dock dock)
+    {
+        DockPanel.SetDock(element, dock);
+        return element;
+    }
+
     private void Link_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
         Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
@@ -399,6 +466,19 @@ public partial class SettingsWindow : Window
     }
 
     private Brush ThemeBrush(string key) => (Brush)FindResource(key);
+
+    private static Brush CreatePreviewBackdrop()
+    {
+        var brush = new LinearGradientBrush(
+            [
+                new GradientStop(Color.FromRgb(0x8F, 0xB4, 0xD4), 0),
+                new GradientStop(Color.FromRgb(0x5C, 0x7A, 0x5E), 0.55),
+                new GradientStop(Color.FromRgb(0x2B, 0x36, 0x2A), 1),
+            ],
+            new Point(0, 0), new Point(1, 1));
+        brush.Freeze();
+        return brush;
+    }
 
     private static string? Typed(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

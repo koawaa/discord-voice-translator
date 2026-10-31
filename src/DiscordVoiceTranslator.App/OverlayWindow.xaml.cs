@@ -1,11 +1,8 @@
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using DiscordVoiceTranslator.App.Interop;
 using static DiscordVoiceTranslator.Core.Localization.UiText;
@@ -17,10 +14,8 @@ internal sealed record OverlaySpeaker(string Name, Brush Color, ImageSource? Ava
 
 public partial class OverlayWindow : Window
 {
-    private static readonly Brush TextBrush = Frozen(Colors.White);
-    private static readonly Brush OriginalBrush = Frozen(Color.FromRgb(0xB8, 0xB8, 0xB8));
-
     private readonly OverlaySettings _settings;
+    private readonly OverlayResizer _resizer;
     private readonly DispatcherTimer _topmostTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private IntPtr _hwnd;
     private GlobalHotkeys? _hotkeys;
@@ -45,8 +40,17 @@ public partial class OverlayWindow : Window
         ApplySettings();
         SetPaused(false);
 
+        _resizer = new OverlayResizer(this, ResizeHandles);
+        _resizer.Dragging += size =>
+        {
+            SizeText.Text = $"{size.Width:0} × {size.Height:0}";
+            SizeBadge.Visibility = Visibility.Visible;
+        };
+        _resizer.DragEnded += () => SizeBadge.Visibility = Visibility.Collapsed;
+
         SourceInitialized += OnSourceInitialized;
-        MouseLeftButtonDown += (_, _) => { if (_editMode) DragMove(); };
+        // Les boutons gardent leurs clics : seul le reste de la surface sert à déplacer.
+        MouseLeftButtonDown += (_, _) => { if (_editMode) _resizer.BeginDrag(Edges.All, this); };
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -77,8 +81,12 @@ public partial class OverlayWindow : Window
             Lines.Children.RemoveAt(0);
     }
 
+    /// <summary>Taille d'origine, en bas au centre de l'écran principal.</summary>
     internal void ResetPosition()
     {
+        var defaults = new OverlaySettings();
+        Width = _settings.Width = defaults.Width;
+        Height = _settings.Height = defaults.Height;
         _settings.Left = _settings.Top = null;
         PlaceWindow();
     }
@@ -129,9 +137,12 @@ public partial class OverlayWindow : Window
         var visibility = on ? Visibility.Visible : Visibility.Collapsed;
         EditFrame.Visibility = visibility;
         EditHeader.Visibility = visibility;
-        ResizeMode = on ? ResizeMode.CanResizeWithGrip : ResizeMode.NoResize;
+        ResizeHandles.Visibility = visibility;
+        Cursor = on ? Cursors.SizeAll : null;
         UpdatePlaceholder();
-        // Après ResizeMode, que WPF applique en retouchant les styles de la fenêtre.
+        // Verrouillé en plein glissement (Ctrl+Alt+F9) : on lâche la fenêtre.
+        if (!on)
+            Mouse.Capture(null);
         NativeWindow.SetClickThrough(_hwnd, clickThrough: !on);
 
         if (leaving)
@@ -154,63 +165,11 @@ public partial class OverlayWindow : Window
         PauseButton.Content = paused ? T("▶ Resume", "▶ Reprendre") : T("❚❚ Pause", "❚❚ Pause");
     }
 
-    /// <summary>
-    /// Ajoute une prise de parole : avatars et noms colorés (« A / B » si deux voix se
-    /// mêlent), texte, original optionnel en petit.
-    /// </summary>
+    /// <summary>Ajoute une prise de parole, dessinée par le thème choisi.</summary>
     internal void AddLine(IReadOnlyList<OverlaySpeaker> speakers, string text, string? original)
     {
-        double size = _settings.FontSize;
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 1) };
-        foreach (var speaker in speakers.Where(s => s.Avatar is not null))
-        {
-            header.Children.Add(new Ellipse
-            {
-                Width = size,
-                Height = size,
-                Margin = new Thickness(0, 0, 5, 0),
-                Fill = new ImageBrush(speaker.Avatar) { Stretch = Stretch.UniformToFill },
-            });
-        }
-        var names = new TextBlock { FontWeight = FontWeights.SemiBold, FontSize = size * 0.75, VerticalAlignment = VerticalAlignment.Center };
-        for (int i = 0; i < speakers.Count; i++)
-        {
-            if (i > 0)
-                names.Inlines.Add(new Run(" / ") { Foreground = OriginalBrush });
-            names.Inlines.Add(new Run(speakers[i].Name) { Foreground = speakers[i].Color });
-        }
-        header.Children.Add(names);
-
-        var content = new StackPanel();
-        content.Children.Add(header);
-        content.Children.Add(new TextBlock
-        {
-            Text = text,
-            Foreground = TextBrush,
-            FontSize = size,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        if (_settings.ShowOriginal && !string.IsNullOrWhiteSpace(original))
-        {
-            content.Children.Add(new TextBlock
-            {
-                Text = original,
-                Foreground = OriginalBrush,
-                FontStyle = FontStyles.Italic,
-                FontSize = size * 0.7,
-                TextWrapping = TextWrapping.Wrap,
-            });
-        }
-
-        var line = new Border
-        {
-            Background = Frozen(Color.FromArgb((byte)(_settings.BackgroundOpacity * 255), 0, 0, 0)),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(10, 5, 10, 6),
-            Margin = new Thickness(0, 4, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Child = content,
-        };
+        var line = SubtitleTheme.Find(_settings.Theme).BuildLine(
+            speakers, text, _settings.ShowOriginal ? original : null, _settings.FontSize, _settings.BackgroundOpacity);
         Lines.Children.Add(line);
         while (Lines.Children.Count > _settings.MaxLines)
             Lines.Children.RemoveAt(0);
@@ -242,12 +201,5 @@ public partial class OverlayWindow : Window
         _topmostTimer.Stop();
         _hotkeys?.Dispose();
         base.OnClosed(e);
-    }
-
-    private static SolidColorBrush Frozen(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
     }
 }

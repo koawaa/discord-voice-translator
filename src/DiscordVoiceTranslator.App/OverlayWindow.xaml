@@ -7,11 +7,12 @@
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         MinWidth="300" MinHeight="120">
     <Grid>
-        <!-- Cadre et fond visibles uniquement en mode édition : ils rendent toute la surface saisissable. -->
-        <Border x:Name="EditFrame" Visibility="Collapsed" CornerRadius="8"
+        <!-- Cadre et fond visibles uniquement en mode édition : ils rendent toute la surface saisissable.
+             En retrait de 6 px : les poignées posées sur le trait restent entières dans la fenêtre. -->
+        <Border x:Name="EditFrame" Visibility="Collapsed" CornerRadius="8" Margin="6"
                 BorderThickness="2" BorderBrush="#CC4FA3FF" Background="#99101418" />
 
-        <Grid Margin="10">
+        <Grid Margin="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -19,9 +20,12 @@
             </Grid.RowDefinitions>
 
             <Grid x:Name="EditHeader" Grid.Row="0" Visibility="Collapsed" Margin="0,0,0,6">
-                <StackPanel Margin="0,0,130,0">
+                <!-- Place des trois boutons à droite (Pause, Paramètres, ✕). -->
+                <StackPanel Margin="0,0,210,0">
                     <TextBlock Foreground="White" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"
-                               Text="{local:Tr En='Edit mode: drag to move, bottom-right corner to resize', Fr='Mode édition : glisser pour déplacer, coin bas-droit pour redimensionner'}" />
+                               Text="{local:Tr En='Edit mode: drag to move, edges and corners to resize', Fr='Mode édition : glisser pour déplacer, bords et coins pour redimensionner'}" />
+                    <TextBlock Foreground="#FFB8C2CC" FontSize="12" TextWrapping="Wrap"
+                               Text="{local:Tr En='Snaps to the screen edges and center · Shift: no snapping · Ctrl: resize from the center · Esc: cancel', Fr='S’aimante aux bords et au centre de l’écran · Maj : sans aimant · Ctrl : depuis le centre · Échap : annuler'}" />
                     <TextBlock x:Name="HotkeyHelp" Foreground="#FFB8C2CC" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock x:Name="StatusText" Foreground="#FF8FD18F" FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
@@ -58,5 +62,15 @@
                 </Border>
             </StackPanel>
         </Grid>
+
+        <!-- Taille en cours, seulement pendant un glissement. -->
+        <Border x:Name="SizeBadge" Visibility="Collapsed" IsHitTestVisible="False"
+                HorizontalAlignment="Center" VerticalAlignment="Center" Padding="12,5" CornerRadius="6"
+                Background="#E6101418" BorderBrush="#CC4FA3FF" BorderThickness="1">
+            <TextBlock x:Name="SizeText" Foreground="White" FontSize="15" FontWeight="SemiBold" />
+        </Border>
+
+        <!-- Poignées des bords et des coins, créées par OverlayResizer. Par-dessus tout le reste. -->
+        <Grid x:Name="ResizeHandles" Visibility="Collapsed" />
     </Grid>
 </Window>

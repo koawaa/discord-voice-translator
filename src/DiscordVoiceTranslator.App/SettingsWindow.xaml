@@ -818,6 +818,16 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="Overlay" />
 
+                        <TextBlock Style="{StaticResource Section}" Text="{local:Tr En='SUBTITLE THEME', Fr='THÈME DES SOUS-TITRES'}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
+                                           Text="{local:Tr En='Applies to the next lines. The previews follow the font and background opacity below.', Fr='S’applique aux lignes suivantes. Les aperçus suivent la police et l’opacité du fond ci-dessous.'}" />
+                                <!-- Marges négatives : rattrapent l'espace laissé à droite et sous chaque carte. -->
+                                <UniformGrid x:Name="ThemesPanel" Columns="2" Margin="0,0,-8,-8" />
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Style="{StaticResource Section}" Text="{local:Tr En=APPEARANCE, Fr=APPARENCE}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
@@ -875,8 +885,8 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Body}"
-                                           Text="{local:Tr En='To move or resize it: Ctrl+Alt+F9 (edit mode), then Ctrl+Alt+F9 again to lock it. Ctrl+Alt+F10 hides or shows it.', Fr='Pour le déplacer ou le redimensionner : Ctrl+Alt+F9 (mode édition), puis de nouveau Ctrl+Alt+F9 pour le verrouiller. Ctrl+Alt+F10 le masque ou l’affiche.'}" />
-                                <Button Content="{local:Tr En='Put the overlay back at the bottom center', Fr='Remettre l’overlay en bas au centre'}"
+                                           Text="{local:Tr En='To move or resize it: Ctrl+Alt+F9 (edit mode), drag it or pull its edges and corners, then Ctrl+Alt+F9 again to lock it. It snaps to the screen edges and center (hold Shift to place it freely, Ctrl to resize from the center). Ctrl+Alt+F10 hides or shows it.', Fr='Pour le déplacer ou le redimensionner : Ctrl+Alt+F9 (mode édition), fais-le glisser ou tire ses bords et ses coins, puis de nouveau Ctrl+Alt+F9 pour le verrouiller. Il s’aimante aux bords et au centre de l’écran (Maj enfoncée pour le placer librement, Ctrl pour redimensionner depuis le centre). Ctrl+Alt+F10 le masque ou l’affiche.'}" />
+                                <Button Content="{local:Tr En='Put the overlay back at the bottom center, at its original size', Fr='Remettre l’overlay en bas au centre, à sa taille d’origine'}"
                                         HorizontalAlignment="Left" Margin="0,14,0,0" Click="ResetPosition_Click" />
                             </StackPanel>
                         </Border>

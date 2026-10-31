@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Drawing = System.Drawing;
 
 namespace DiscordVoiceTranslator.App.Interop;
 
@@ -11,7 +12,7 @@ internal static class NativeWindow
     private const long WS_EX_NOACTIVATE = 0x08000000;    // ne vole jamais le focus au jeu
 
     private static readonly IntPtr HWND_TOPMOST = new(-1);
-    private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
+    private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
 
     /// <summary>
     /// Mode normal : traversable par la souris. Mode édition : on retire seulement
@@ -31,6 +32,24 @@ internal static class NativeWindow
     /// </summary>
     public static void KeepOnTop(IntPtr hwnd) =>
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+
+    /// <summary>Position et taille en pixels écran, comme le curseur et les écrans de Windows Forms.</summary>
+    public static Drawing.Rectangle GetBounds(IntPtr hwnd)
+    {
+        GetWindowRect(hwnd, out var rect);
+        return Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+    }
+
+    /// <summary>Position et taille d'un seul coup : aucun bord ne bouge en deux temps.</summary>
+    public static void SetBounds(IntPtr hwnd, Drawing.Rectangle bounds) =>
+        SetWindowPos(hwnd, IntPtr.Zero, bounds.X, bounds.Y, bounds.Width, bounds.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+
+    /// <summary>
+    /// État réel de la touche, même quand le jeu a le focus clavier (l'overlay ne l'a jamais) :
+    /// Keyboard.Modifiers ne voit que les touches reçues par notre propre fenêtre.
+    /// </summary>
+    public static bool IsKeyDown(System.Windows.Input.Key key) =>
+        (GetAsyncKeyState(System.Windows.Input.KeyInterop.VirtualKeyFromKey(key)) & 0x8000) != 0;
 
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_CAPTION_COLOR = 35;
 
@@ -57,4 +76,16 @@ internal static class NativeWindow
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left, Top, Right, Bottom;
+    }
 }

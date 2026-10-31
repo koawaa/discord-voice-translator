@@ -51,13 +51,14 @@ Without this step, subtitles still work, but each line shows the language instea
 
 ### Everyday use
 
-- **Ctrl+Alt+F9**: edit mode (drag to move, bottom-right corner to resize), press again to lock. Once locked, your clicks go through to the game.
+- **Ctrl+Alt+F9**: edit mode (drag to move, pull the edges or corners to resize), press again to lock. The overlay snaps to the screen edges and center: hold **Shift** to place it freely, **Ctrl** to resize from the center, **Esc** to cancel. Once locked, your clicks go through to the game.
 - **Ctrl+Alt+F10**: hide or show the subtitles.
 - **Ctrl+Alt+F11**: pause or resume (also in the tray menu and the edit-mode bar). While paused nothing is listened to or translated, so no DeepL characters are used, and the app stays open.
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
 - **Settings → Audio**: subtitle Discord, and add games or other apps that are open (launch the game first so it appears in the list). Their lines are labelled with the app's name and the language. The whole sound of a game is listened to, so songs with lyrics can give false lines.
+- **Settings → Overlay → Subtitle theme**: *Classic* (dark box), *Cinema* (outlined text, no box), *Chat* (Discord-style message) or *Neon* (glowing border in the speaker's color), with a preview of each.
 - **Settings → Transcription → Speech model**: *Fast* (Whisper large-v3-turbo, the default, light on the PC) or *Accurate* (Whisper large-v3: fewer mistakes, but slower and heavier on the graphics card, about 2 GB of video memory). A new model is downloaded once, at the next start.
 - **Settings → General → Status** shows what the app is doing: graphics card used, memory, delay, DeepL quota, Discord connection.
 
@@ -147,12 +148,13 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 
 ### Au quotidien
 
-- **Ctrl+Alt+F9** : mode édition (glisser pour déplacer, coin bas-droit pour redimensionner), puis de nouveau pour verrouiller. Une fois verrouillé, tes clics passent au jeu.
+- **Ctrl+Alt+F9** : mode édition (glisser pour déplacer, tirer les bords ou les coins pour redimensionner), puis de nouveau pour verrouiller. L'overlay s'aimante aux bords et au centre de l'écran : **Maj** enfoncée pour le placer librement, **Ctrl** pour redimensionner depuis le centre, **Échap** pour annuler. Une fois verrouillé, tes clics passent au jeu.
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
 - **Ctrl+Alt+F11** : mettre en pause ou reprendre (aussi dans le menu de l'icône et la barre du mode édition). En pause, rien n'est écouté ni traduit, donc aucun caractère DeepL n'est consommé, et l'appli reste ouverte.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
 - **Paramètres → Audio** : sous-titrer Discord, et ajouter des jeux ou d'autres applis ouvertes (lance d'abord le jeu pour qu'il apparaisse dans la liste). Leurs lignes portent le nom de l'appli et la langue. Tout le son d'un jeu est écouté : des chansons avec paroles peuvent donner de fausses lignes.
+- **Paramètres → Overlay → Thème des sous-titres** : *Classique* (boîte sombre), *Cinéma* (texte cerné, sans boîte), *Discussion* (message façon Discord) ou *Néon* (contour lumineux à la couleur de la personne), avec un aperçu de chacun.
 - **Paramètres → Transcription → Modèle de reconnaissance** : *Rapide* (Whisper large-v3-turbo, par défaut, léger pour le PC) ou *Précis* (Whisper large-v3 : moins d'erreurs, mais plus lent et plus lourd pour la carte graphique, environ 2 Go de mémoire vidéo). Un nouveau modèle est téléchargé une seule fois, au prochain démarrage.
 - **Paramètres → Général → État** montre ce que fait l'appli : carte graphique utilisée, mémoire, délai, quota DeepL, connexion Discord.
 

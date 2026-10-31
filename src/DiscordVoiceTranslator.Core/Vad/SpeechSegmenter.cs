@@ -22,18 +22,42 @@ public sealed record VadOptions
     /// <summary>En dessous, c'est un bruit (toux, clic) : le segment est jeté.</summary>
     public int MinSpeechMs { get; init; } = 250;
 
+    /// <summary>
+    /// Quelqu'un qui parle sans s'arrêter depuis plus longtemps : une simple respiration
+    /// (<see cref="ShortSilenceMs"/>) suffit alors à finir la phrase. Un narrateur ou une
+    /// personne qui enchaîne est ainsi sous-titré phrase par phrase, et non par blocs de 12 s.
+    /// </summary>
+    public int SoftMaxSegmentMs { get; init; } = 6_000;
+
+    public int ShortSilenceMs { get; init; } = 250;
+
     /// <summary>Au-delà, on coupe pour afficher quelque chose sans attendre la fin d'un monologue.</summary>
     public int MaxSegmentMs { get; init; } = 12_000;
+
+    /// <summary>Pendant que la personne parle, un aperçu de la phrase en cours à ce rythme (0 : jamais).</summary>
+    public int ProgressIntervalMs { get; init; } = 1_000;
+
+    /// <summary>
+    /// Pas d'aperçu avant : sur une seconde de parole, Whisper se trompe souvent (« your
+    /// intelligence » pour « your intel is a scam »), et une phrase courte arrive de toute
+    /// façon juste après. Les aperçus ne servent qu'aux phrases longues.
+    /// </summary>
+    public int FirstProgressMs { get; init; } = 2_500;
 }
 
 /// <summary>Une prise de parole, en 16 kHz mono, horodatée sur <see cref="QpcClock"/>.</summary>
+/// <param name="UtteranceId">
+/// Numéro de la prise de parole : ses aperçus et sa version finale ont le même. Une phrase
+/// coupée pour longueur continue sous un nouveau numéro.
+/// </param>
 public sealed record SpeechSegment(
     float[] Samples,
     long StartQpc,
     long SpeechStartQpc,
     long SpeechEndQpc,
     long ClosedQpc,
-    bool CutAtMaxLength)
+    bool CutAtMaxLength,
+    long UtteranceId = 0)
 {
     public TimeSpan Duration => TimeSpan.FromSeconds(Samples.Length / (double)SileroVad.SampleRate);
 }
@@ -51,14 +75,22 @@ public sealed class SpeechSegmenter
     private readonly SileroVad _vad;
     private readonly VadOptions _options;
     private readonly int _preRollChunks, _minSilenceSamples, _tailPadSamples, _maxSegmentSamples;
+    private readonly int _softMaxSegmentSamples, _shortSilenceSamples, _progressIntervalSamples, _firstProgressSamples;
     private readonly long _minSpeech100ns;
+    private long _utteranceId;
+    private int _sinceProgress;
 
     private readonly float[] _chunk = new float[Chunk];
     private int _chunkFill;
     private long _chunkStartQpc;
 
+    // Où chercher le point de coupe d'un monologue trop long : les 2 dernières secondes.
+    private const int CutSearchChunks = 2 * SileroVad.SampleRate / Chunk;
+
     private readonly Queue<(float[] Samples, long Qpc)> _preRoll = new();
     private readonly List<float> _segment = new();
+    // Probabilité de parole de chaque bloc de _segment, pour couper au moment le plus calme.
+    private readonly List<float> _probabilities = new();
     private bool _speaking;
     private long _segmentStartQpc, _firstSpeechQpc, _lastSpeechQpc;
     private int _lastSpeechIndex, _silenceSamples;
@@ -71,6 +103,9 @@ public sealed class SpeechSegmenter
 
     public event Action<SpeechSegment>? SegmentReady;
 
+    /// <summary>La phrase en cours jusqu'ici, pendant que la personne parle encore.</summary>
+    public event Action<SpeechSegment>? SpeechProgress;
+
     public SpeechSegmenter(SileroVad vad, VadOptions options)
     {
         _vad = vad;
@@ -79,6 +114,10 @@ public sealed class SpeechSegmenter
         _minSilenceSamples = MsToSamples(options.MinSilenceMs);
         _tailPadSamples = MsToSamples(options.TailPadMs);
         _maxSegmentSamples = MsToSamples(options.MaxSegmentMs);
+        _softMaxSegmentSamples = MsToSamples(options.SoftMaxSegmentMs);
+        _shortSilenceSamples = Math.Min(MsToSamples(options.ShortSilenceMs), _minSilenceSamples);
+        _progressIntervalSamples = MsToSamples(options.ProgressIntervalMs);
+        _firstProgressSamples = MsToSamples(options.FirstProgressMs);
         _minSpeech100ns = options.MinSpeechMs * 10_000L;
     }
 
@@ -107,12 +146,19 @@ public sealed class SpeechSegmenter
             if (probability >= _options.Threshold)
             {
                 _segment.Clear();
+                _probabilities.Clear();
                 _segmentStartQpc = _preRoll.Count > 0 ? _preRoll.Peek().Qpc : startQpc;
                 foreach (var (samples, _) in _preRoll)
+                {
                     _segment.AddRange(samples);
+                    _probabilities.Add(0f);
+                }
                 _preRoll.Clear();
                 _segment.AddRange(chunk);
+                _probabilities.Add(probability);
                 _speaking = true;
+                _utteranceId++;
+                _sinceProgress = 0;
                 _firstSpeechQpc = startQpc;
                 MarkSpeech(endQpc);
                 SpeechStarted?.Invoke(startQpc);
@@ -132,10 +178,54 @@ public sealed class SpeechSegmenter
         else if (probability < _options.NegThreshold || _silenceSamples > 0)
             _silenceSamples += Chunk;
 
-        if (_silenceSamples >= _minSilenceSamples)
-            Close(cut: false, endQpc);
+        _probabilities.Add(probability);
+
+        int silenceNeeded = _segment.Count >= _softMaxSegmentSamples ? _shortSilenceSamples : _minSilenceSamples;
+        if (_silenceSamples >= silenceNeeded)
+            Close(endQpc);
         else if (_segment.Count >= _maxSegmentSamples)
-            Close(cut: true, endQpc);
+            CutAtQuietestPoint();
+        else
+            ReportProgress(endQpc);
+    }
+
+    /// <summary>
+    /// Monologue trop long : on coupe au moment le plus calme des dernières secondes (le blanc
+    /// entre deux mots), pas pile à la limite, en plein mot. La suite repart aussitôt comme une
+    /// nouvelle prise de parole déjà commencée.
+    /// </summary>
+    private void CutAtQuietestPoint()
+    {
+        int from = Math.Max(1, _probabilities.Count - CutSearchChunks);
+        int quietest = from;
+        for (int j = from + 1; j < _probabilities.Count; j++)
+        {
+            if (_probabilities[j] < _probabilities[quietest])
+                quietest = j;
+        }
+
+        int keep = (quietest + 1) * Chunk;
+        long cutQpc = _segmentStartQpc + keep * TicksPerSample;
+        SegmentReady?.Invoke(new SpeechSegment(_segment.GetRange(0, keep).ToArray(), _segmentStartQpc, _firstSpeechQpc,
+            cutQpc, QpcClock.Now100ns, CutAtMaxLength: true, _utteranceId));
+
+        _segment.RemoveRange(0, keep);
+        _probabilities.RemoveRange(0, quietest + 1);
+        _lastSpeechIndex = Math.Max(0, _lastSpeechIndex - keep);
+        _segmentStartQpc = _firstSpeechQpc = cutQpc;
+        _utteranceId++;
+        _sinceProgress = 0;
+    }
+
+    private void ReportProgress(long endQpc)
+    {
+        if (_progressIntervalSamples == 0 || SpeechProgress is null)
+            return;
+        _sinceProgress += Chunk;
+        if (_sinceProgress < _progressIntervalSamples || _segment.Count < _firstProgressSamples)
+            return;
+        _sinceProgress = 0;
+        SpeechProgress(new SpeechSegment(_segment.ToArray(), _segmentStartQpc, _firstSpeechQpc, endQpc, QpcClock.Now100ns, false, _utteranceId));
     }
 
     private void MarkSpeech(long endQpc)
@@ -145,14 +235,15 @@ public sealed class SpeechSegmenter
         _lastSpeechQpc = endQpc;
     }
 
-    private void Close(bool cut, long endQpc)
+    /// <summary>Fin de la prise de parole (assez de silence) : envoyée, ou jetée si trop courte.</summary>
+    private void Close(long endQpc)
     {
-        int keep = cut ? _segment.Count : Math.Min(_segment.Count, _lastSpeechIndex + _tailPadSamples);
+        int keep = Math.Min(_segment.Count, _lastSpeechIndex + _tailPadSamples);
         if (_lastSpeechQpc - _firstSpeechQpc >= _minSpeech100ns)
         {
             var samples = _segment.GetRange(0, keep).ToArray();
             SegmentReady?.Invoke(new SpeechSegment(samples, _segmentStartQpc, _firstSpeechQpc,
-                cut ? endQpc : _lastSpeechQpc, QpcClock.Now100ns, cut));
+                _lastSpeechQpc, QpcClock.Now100ns, CutAtMaxLength: false, _utteranceId));
         }
         else
         {
@@ -160,14 +251,9 @@ public sealed class SpeechSegmenter
         }
 
         _segment.Clear();
+        _probabilities.Clear();
         _silenceSamples = 0;
-        // Coupé pour longueur : la personne parle encore, le segment suivant démarre tout de suite.
-        _speaking = cut;
-        if (cut)
-        {
-            _segmentStartQpc = _firstSpeechQpc = _lastSpeechQpc = endQpc;
-            _lastSpeechIndex = 0;
-        }
+        _speaking = false;
     }
 
     private static int MsToSamples(int ms) => ms * SileroVad.SampleRate / 1000;

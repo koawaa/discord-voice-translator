@@ -39,6 +39,10 @@ public sealed class DiscordVoiceService : IAsyncDisposable
 
     public void Start() => _supervisor = Task.Run(SuperviseAsync);
 
+    /// <summary>Pseudos des personnes présentes dans le salon vocal (toi compris).</summary>
+    public IReadOnlyList<string> ChannelMemberNames =>
+        _inChannel.Keys.Select(id => _known.TryGetValue(id, out var member) ? member.DisplayName : null).OfType<string>().ToList();
+
     /// <summary>Qui parlait entre ces deux instants (vide si inconnu ou RPC déconnecté).</summary>
     public IReadOnlyList<VoiceMember> IdentifySpeakers(long startQpc, long endQpc) =>
         _tracker.Attribute(startQpc, endQpc, Margin.Ticks, QpcClock.Now100ns)

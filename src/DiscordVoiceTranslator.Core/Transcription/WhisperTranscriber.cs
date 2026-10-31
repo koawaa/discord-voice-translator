@@ -28,16 +28,24 @@ public sealed class WhisperTranscriber : ITranscriber
     // whisper.cpp refuse ou transcrit mal en dessous d'une seconde : on complète par du silence.
     private const int MinSamples = SileroVad.SampleRate * 11 / 10;
 
+    // Whisper ne lit que les ~220 premiers jetons du prompt : on s'arrête bien avant.
+    private const int MaxPromptChars = 500;
+
     private readonly WhisperFactory _factory;
-    private readonly WhisperProcessor _processor;
+    private readonly int _threads;
     private readonly SemaphoreSlim _busy = new(1, 1);
     private readonly string[] _allowedLanguages;
+    private WhisperProcessor _processor;
+    private string _prompt = "";
+    private volatile string _wantedPrompt = "";
+    private HashSet<string> _promptWords = [];
 
     public string Description { get; }
 
     public WhisperTranscriber(WhisperOptions options)
     {
         _allowedLanguages = options.AllowedLanguages.ToArray();
+        _threads = options.Threads;
         AddCudaToPath();
         _factory = WhisperFactory.FromPath(options.ModelPath, new WhisperFactoryOptions
         {
@@ -45,19 +53,56 @@ public sealed class WhisperTranscriber : ITranscriber
             // Attention « flash » : moins de VRAM pour les tampons de calcul, et plus rapide.
             UseFlashAttention = true,
         });
+        _processor = BuildProcessor("");
 
+        Description = $"Whisper {Path.GetFileNameWithoutExtension(options.ModelPath)}, {RuntimeOptions.LoadedLibrary?.ToString() ?? "?"}";
+    }
+
+    /// <summary>
+    /// Mots que Whisper doit s'attendre à entendre (pseudos du salon, termes du jeu), du plus
+    /// au moins important. Pris en compte à la phrase suivante.
+    /// </summary>
+    public void SetVocabulary(IReadOnlyList<string> terms)
+    {
+        var kept = new List<string>();
+        int length = 0;
+        foreach (string term in terms.Select(t => t.Trim()).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (length + term.Length + 2 > MaxPromptChars)
+                break;
+            kept.Add(term);
+            length += term.Length + 2;
+        }
+        _wantedPrompt = kept.Count == 0 ? "" : string.Join(", ", kept) + ".";
+    }
+
+    private WhisperProcessor BuildProcessor(string prompt)
+    {
         var builder = _factory.CreateBuilder()
-            .WithThreads(options.Threads)
+            .WithThreads(_threads)
             // Chaque segment est indépendant : pas de texte précédent en guise de contexte,
-            // sinon une hallucination se propage aux phrases suivantes.
+            // sinon une hallucination se propage aux phrases suivantes. Le prompt, lui, est
+            // redonné à chaque phrase.
             .WithNoContext()
             .WithSingleSegment();
+        if (prompt.Length > 0)
+            builder = builder.WithPrompt(prompt);
         builder = _allowedLanguages.Length == 1
             ? builder.WithLanguage(_allowedLanguages[0])
             : builder.WithLanguageDetection();
-        _processor = builder.Build();
+        return builder.Build();
+    }
 
-        Description = $"Whisper {Path.GetFileNameWithoutExtension(options.ModelPath)}, {RuntimeOptions.LoadedLibrary?.ToString() ?? "?"}";
+    // Le prompt ne se change qu'en recréant le processeur : seulement quand la liste a changé.
+    private void ApplyVocabulary()
+    {
+        string wanted = _wantedPrompt;
+        if (wanted == _prompt)
+            return;
+        _processor.Dispose();
+        _processor = BuildProcessor(wanted);
+        _prompt = wanted;
+        _promptWords = Words(wanted).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task WarmUpAsync(CancellationToken cancellationToken)
@@ -83,6 +128,7 @@ public sealed class WhisperTranscriber : ITranscriber
 
     private async Task<TranscriptionResult?> TranscribeAloneAsync(SpeechSegment segment, CancellationToken cancellationToken)
     {
+        ApplyVocabulary();
         var stopwatch = Stopwatch.StartNew();
         float[] samples = segment.Samples;
         if (samples.Length < MinSamples)
@@ -110,10 +156,22 @@ public sealed class WhisperTranscriber : ITranscriber
             text.Append(part.Text);
 
         string result = text.ToString().Trim();
-        if (result.Length == 0)
+        if (result.Length == 0 || IsPromptEcho(result))
             return null;
         return new TranscriptionResult(result, language, languageProbability, segment, stopwatch.Elapsed, detectionTime);
     }
+
+    // Sur du bruit, Whisper recrache parfois son prompt (« Alice, Bob, AWP, Mirage. ») : une
+    // suite d'au moins trois mots tous tirés de la liste n'est pas une vraie phrase. Un pseudo
+    // crié seul (« Alice ! ») passe toujours.
+    private bool IsPromptEcho(string text)
+    {
+        var words = Words(text).ToList();
+        return words.Count >= 3 && words.All(_promptWords.Contains);
+    }
+
+    private static IEnumerable<string> Words(string text) =>
+        text.Split((char[])[' ', ',', '.', '!', '?', ';', ':', '"', '…'], StringSplitOptions.RemoveEmptyEntries);
 
     // Le CUDA Toolkit 13 range ses DLL (cudart, cuBLAS) dans bin\x64. Un processus lancé avant
     // l'installation (VS Code, terminal, Explorateur) garde l'ancien PATH et retomberait sans

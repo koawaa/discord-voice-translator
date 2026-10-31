@@ -19,6 +19,9 @@ internal sealed class AppSettings
     /// <summary>« en » ou « fr ». Anglais par défaut.</summary>
     public string UiLanguage { get; set; } = "en";
 
+    /// <summary>Au démarrage, demander à GitHub s'il existe une version plus récente.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     public OverlaySettings Overlay { get; set; } = new();
     public TranslationSettings Translation { get; set; } = new();
     public TranscriptionSettings Transcription { get; set; } = new();
@@ -81,6 +84,9 @@ internal sealed class TranslationSettings
     public bool Enabled { get; set; } = true;
     public string TargetLanguage { get; set; } = "EN-US";
 
+    /// <summary>Tutoiement plutôt que vouvoiement, entre joueurs, quand la langue fait la différence.</summary>
+    public bool Informal { get; set; } = true;
+
     /// <summary>
     /// Clés DeepL dans l'ordre d'utilisation, une par ligne dans le même secret chiffré
     /// (un ancien secret à une seule clé se relit donc tel quel).
@@ -109,6 +115,12 @@ internal sealed class TranscriptionSettings
     public int EndOfSentenceSilenceMs { get; set; } = 500;
 
     public bool UseGpu { get; set; } = true;
+
+    /// <summary>Pseudos du salon et termes du jeu en cours donnés à Whisper et protégés de la traduction.</summary>
+    public bool AutoVocabulary { get; set; } = true;
+
+    /// <summary>Aperçus traduits pendant que la personne parle, remplacés à la fin de la phrase.</summary>
+    public bool LiveSubtitles { get; set; } = true;
 }
 
 /// <summary>Applis dont on sous-titre les voix : Discord de base, plus des jeux ou d'autres applis.</summary>
@@ -125,4 +137,10 @@ internal sealed class DiscordSettings
 {
     /// <summary>Décalage toléré entre les événements « parle » de Discord et l'audio.</summary>
     public int SpeakerMarginMs { get; set; } = 300;
+
+    /// <summary>Personnes à ne plus sous-titrer (un bot musique, un ami qui parle déjà ta langue).</summary>
+    public List<HiddenSpeaker> HiddenSpeakers { get; set; } = [];
 }
+
+/// <summary>Reconnue par son ID Discord (le pseudo peut changer), le nom sert seulement à l'affichage.</summary>
+internal sealed record HiddenSpeaker(string Id, string Name);

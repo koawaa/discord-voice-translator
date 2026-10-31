@@ -32,6 +32,7 @@ public partial class SettingsWindow : Window
     private readonly List<string> _storedDeepLKeys = TranslationSettings.LoadDeepLKeys();
     private readonly ObservableCollection<KeyRow> _keys = [];
     private readonly ObservableCollection<CapturedApp> _apps;
+    private readonly ObservableCollection<HiddenSpeaker> _hidden;
     private readonly DiscordAppCredentials? _storedDiscord = DiscordAppCredentials.Load();
     private bool _forgotAuthorization;
 
@@ -51,10 +52,14 @@ public partial class SettingsWindow : Window
         _settings = settings;
 
         UiLanguageBox.SelectedIndex = settings.UiLanguage == "fr" ? 1 : 0;
+        UpdatesBox.IsChecked = settings.CheckForUpdates;
         TranslateBox.IsChecked = settings.Translation.Enabled;
         TargetBox.ItemsSource = TargetLanguage.All;
         TargetBox.SelectedItem = TargetLanguage.Find(settings.Translation.TargetLanguage);
         ShowOriginalBox.IsChecked = settings.Overlay.ShowOriginal;
+        InformalBox.IsChecked = settings.Translation.Informal;
+        VocabularyBox.IsChecked = settings.Transcription.AutoVocabulary;
+        LiveBox.IsChecked = settings.Transcription.LiveSubtitles;
 
         CaptureDiscordBox.IsChecked = settings.Audio.CaptureDiscord;
         _apps = new ObservableCollection<CapturedApp>(settings.Audio.Apps);
@@ -162,6 +167,10 @@ public partial class SettingsWindow : Window
             ? T("It will be encrypted with your Windows account (DPAPI).", "Il sera chiffré avec ton compte Windows (DPAPI).")
             : T("A secret is saved (encrypted). Leave empty to keep it.", "Un secret est enregistré (chiffré). Laisse vide pour le garder.");
         MarginSlider.Value = settings.Discord.SpeakerMarginMs;
+        _hidden = new ObservableCollection<HiddenSpeaker>(settings.Discord.HiddenSpeakers);
+        HiddenList.ItemsSource = _hidden;
+        _hidden.CollectionChanged += (_, _) => NoHiddenText.Visibility = _hidden.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoHiddenText.Visibility = _hidden.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // État du moteur (VRAM, latence, runtime...) rafraîchi en direct pendant que la fenêtre est ouverte.
         StatusBox.Text = currentStatus();
@@ -258,13 +267,19 @@ public partial class SettingsWindow : Window
             || silence != transcription.EndOfSentenceSilenceMs
             || useGpu != transcription.UseGpu
             || model != WhisperModel.Find(transcription.Model).Id;
-        TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage || keysChanged;
+        bool informal = InformalBox.IsChecked == true;
+        TranslationChanged = translate != _settings.Translation.Enabled || target != _settings.Translation.TargetLanguage
+            || informal != _settings.Translation.Informal || keysChanged;
+        _settings.Translation.Informal = informal;
+        transcription.AutoVocabulary = VocabularyBox.IsChecked == true;
+        transcription.LiveSubtitles = LiveBox.IsChecked == true;
 
         AudioChanged = captureDiscord != _settings.Audio.CaptureDiscord || !_apps.SequenceEqual(_settings.Audio.Apps);
         _settings.Audio.CaptureDiscord = captureDiscord;
         _settings.Audio.Apps = _apps.ToList();
 
         _settings.UiLanguage = uiLanguage;
+        _settings.CheckForUpdates = UpdatesBox.IsChecked == true;
         _settings.Translation.Enabled = translate;
         _settings.Translation.TargetLanguage = target;
         _settings.Overlay.ShowOriginal = ShowOriginalBox.IsChecked == true;
@@ -279,6 +294,7 @@ public partial class SettingsWindow : Window
         transcription.UseGpu = useGpu;
         transcription.Model = model;
         _settings.Discord.SpeakerMarginMs = (int)MarginSlider.Value;
+        _settings.Discord.HiddenSpeakers = _hidden.ToList();
 
         DeepLKeys = translate ? keys : [];
         Discord = discord;
@@ -321,6 +337,9 @@ public partial class SettingsWindow : Window
 
     private void RemoveApp_Click(object sender, RoutedEventArgs e) =>
         _apps.Remove((CapturedApp)((FrameworkElement)sender).DataContext);
+
+    private void UnhideSpeaker_Click(object sender, RoutedEventArgs e) =>
+        _hidden.Remove((HiddenSpeaker)((FrameworkElement)sender).DataContext);
 
     private void ShowAppsError(string message)
     {

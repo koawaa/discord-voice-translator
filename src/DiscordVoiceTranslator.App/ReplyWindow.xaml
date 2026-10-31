@@ -1,0 +1,45 @@
+<Window x:Class="DiscordVoiceTranslator.App.ReplyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DiscordVoiceTranslator.App"
+        Title="{local:Tr En='Reply in their language', Fr='Répondre dans leur langue'}"
+        Width="560" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" Topmost="True"
+        Background="{DynamicResource PageBrush}" Foreground="{DynamicResource TextBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
+        UseLayoutRounding="True" SourceInitialized="Window_SourceInitialized">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <StackPanel Margin="20,16,20,18">
+        <DockPanel>
+            <ComboBox x:Name="LanguageBox" DockPanel.Dock="Right" Width="210" DisplayMemberPath="DisplayName" />
+            <TextBlock Style="{StaticResource Label}" VerticalAlignment="Center"
+                       Text="{local:Tr En='Your reply, translated into', Fr='Ta réponse, traduite en'}" />
+        </DockPanel>
+
+        <TextBox x:Name="InputBox" Margin="0,12,0,0" Height="Auto" MinHeight="40" Padding="10,8"
+                 TextWrapping="Wrap" VerticalContentAlignment="Top" KeyDown="InputBox_KeyDown" />
+
+        <DockPanel Margin="0,12,0,0">
+            <Button x:Name="TranslateButton" DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}"
+                    Content="{local:Tr En='Translate and copy (Enter)', Fr='Traduire et copier (Entrée)'}" Click="Translate_Click" />
+            <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0"
+                       Text="{local:Tr En='Then paste it in Discord with Ctrl+V. Esc closes.', Fr='Puis colle-la dans Discord avec Ctrl+V. Échap ferme.'}" />
+        </DockPanel>
+
+        <Border x:Name="ResultCard" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
+            <StackPanel>
+                <!-- En lecture seule mais sélectionnable : on peut n'en copier qu'une partie. -->
+                <TextBox x:Name="ResultBox" IsReadOnly="True" Height="Auto" Padding="0" TextWrapping="Wrap" FontSize="15"
+                         Background="Transparent" BorderThickness="0" />
+                <TextBlock x:Name="ResultStatus" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</Window>

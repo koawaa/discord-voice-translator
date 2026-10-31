@@ -21,6 +21,8 @@ internal sealed class TrayIcon : IDisposable
     public event Action? VisibilityToggleRequested;
     public event Action? PauseToggleRequested;
     public event Action? SettingsRequested;
+    public event Action? HistoryRequested;
+    public event Action? ReplyRequested;
     public event Action? QuitRequested;
 
     public TrayIcon()
@@ -29,6 +31,8 @@ internal sealed class TrayIcon : IDisposable
         _menu.Items.Add(T("Show / hide (Ctrl+Alt+F10)", "Afficher / masquer (Ctrl+Alt+F10)"), null, (_, _) => VisibilityToggleRequested?.Invoke());
         _pauseItem = new Forms.ToolStripMenuItem(PauseText(false), null, (_, _) => PauseToggleRequested?.Invoke());
         _menu.Items.Add(_pauseItem);
+        _menu.Items.Add(T("History (Ctrl+Alt+H)", "Historique (Ctrl+Alt+H)"), null, (_, _) => HistoryRequested?.Invoke());
+        _menu.Items.Add(T("Reply in their language (Ctrl+Alt+R)", "Répondre dans leur langue (Ctrl+Alt+R)"), null, (_, _) => ReplyRequested?.Invoke());
         _menu.Items.Add(T("Settings...", "Paramètres..."), null, (_, _) => SettingsRequested?.Invoke());
         _menu.Items.Add(new Forms.ToolStripSeparator());
         _menu.Items.Add(T("Quit", "Quitter"), null, (_, _) => QuitRequested?.Invoke());
@@ -41,6 +45,20 @@ internal sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _notifyIcon.DoubleClick += (_, _) => EditModeRequested?.Invoke();
+    }
+
+    /// <summary>Nouvelle version : notification Windows, et une entrée en tête du menu pour y revenir.</summary>
+    public void ShowUpdate(string version, Action open)
+    {
+        string text = T($"Version {version} is available: click to download it.", $"La version {version} est disponible : clique pour la télécharger.");
+        var item = new Forms.ToolStripMenuItem(T($"New version {version}: download", $"Nouvelle version {version} : télécharger"), null, (_, _) => open())
+        {
+            Font = new Font(_menu.Font, FontStyle.Bold),
+        };
+        _menu.Items.Insert(0, item);
+        _menu.Items.Insert(1, new Forms.ToolStripSeparator());
+        _notifyIcon.BalloonTipClicked += (_, _) => open();
+        _notifyIcon.ShowBalloonTip(10_000, T("Discord Voice Translator", "Traducteur vocal Discord"), text, Forms.ToolTipIcon.Info);
     }
 
     public void SetPaused(bool paused)

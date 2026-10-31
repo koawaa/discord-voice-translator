@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -14,8 +15,12 @@ internal sealed record OverlaySpeaker(string Name, Brush Color, ImageSource? Ava
 
 public partial class OverlayWindow : Window
 {
+    private const double DraftOpacity = 0.8;
+    private static readonly TimeSpan DraftLifetime = TimeSpan.FromSeconds(15);
+
     private readonly OverlaySettings _settings;
     private readonly OverlayResizer _resizer;
+    private readonly Dictionary<string, (Border Line, DispatcherTimer Expiry)> _drafts = new();
     private readonly DispatcherTimer _topmostTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private IntPtr _hwnd;
     private GlobalHotkeys? _hotkeys;
@@ -26,6 +31,12 @@ public partial class OverlayWindow : Window
 
     /// <summary>Bouton pause du mode édition, ou Ctrl+Alt+F11.</summary>
     public event Action? PauseToggleRequested;
+
+    /// <summary>Ctrl+Alt+H : historique des sous-titres.</summary>
+    public event Action? HistoryRequested;
+
+    /// <summary>Ctrl+Alt+R : répondre dans la langue des autres.</summary>
+    public event Action? ReplyRequested;
 
     /// <summary>L'overlay a été déplacé ou redimensionné (à la sortie du mode édition).</summary>
     public event Action? GeometryChanged;
@@ -61,10 +72,14 @@ public partial class OverlayWindow : Window
         bool editOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F9, ToggleEditMode);
         bool hideOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F10, ToggleVisibility);
         bool pauseOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.F11, () => PauseToggleRequested?.Invoke());
+        bool historyOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.H, () => HistoryRequested?.Invoke());
+        bool replyOk = _hotkeys.Register(ModifierKeys.Control | ModifierKeys.Alt, Key.R, () => ReplyRequested?.Invoke());
         string taken = T(" (ALREADY IN USE)", " (DÉJÀ PRIS)");
         HotkeyHelp.Text = T("Ctrl+Alt+F9: lock / edit", "Ctrl+Alt+F9 : verrouiller / éditer") + (editOk ? "" : taken)
             + "   ·   " + T("Ctrl+Alt+F10: hide / show", "Ctrl+Alt+F10 : masquer / afficher") + (hideOk ? "" : taken)
-            + "   ·   " + T("Ctrl+Alt+F11: pause", "Ctrl+Alt+F11 : pause") + (pauseOk ? "" : taken);
+            + "   ·   " + T("Ctrl+Alt+F11: pause", "Ctrl+Alt+F11 : pause") + (pauseOk ? "" : taken)
+            + "   ·   " + T("Ctrl+Alt+H: history", "Ctrl+Alt+H : historique") + (historyOk ? "" : taken)
+            + "   ·   " + T("Ctrl+Alt+R: reply", "Ctrl+Alt+R : répondre") + (replyOk ? "" : taken);
 
         // Démarre en mode édition pour voir où est l'overlay et l'état du moteur.
         SetEditMode(true);
@@ -165,15 +180,14 @@ public partial class OverlayWindow : Window
         PauseButton.Content = paused ? T("▶ Resume", "▶ Reprendre") : T("❚❚ Pause", "❚❚ Pause");
     }
 
-    /// <summary>Ajoute une prise de parole, dessinée par le thème choisi.</summary>
-    internal void AddLine(IReadOnlyList<OverlaySpeaker> speakers, string text, string? original)
+    /// <summary>
+    /// Ajoute une prise de parole, dessinée par le thème choisi. Si sa source avait un aperçu
+    /// à l'écran, la phrase finale prend sa place au lieu d'apparaître en dessous.
+    /// </summary>
+    internal void AddLine(IReadOnlyList<OverlaySpeaker> speakers, string text, string? original, string? source = null)
     {
-        var line = SubtitleTheme.Find(_settings.Theme).BuildLine(
-            speakers, text, _settings.ShowOriginal ? original : null, _settings.FontSize, _settings.BackgroundOpacity);
-        Lines.Children.Add(line);
-        while (Lines.Children.Count > _settings.MaxLines)
-            Lines.Children.RemoveAt(0);
-        UpdatePlaceholder();
+        var line = BuildLine(speakers, text, original);
+        Place(line, source is not null ? TakeDraft(source) : null);
 
         // Visible pendant DisplaySeconds, puis s'estompe en 1 s et disparaît. 30 images/s
         // suffisent pour un fondu et évitent de redessiner l'overlay à 60+ Hz pendant le jeu.
@@ -185,6 +199,70 @@ public partial class OverlayWindow : Window
             UpdatePlaceholder();
         };
         line.BeginAnimation(OpacityProperty, fade);
+    }
+
+    /// <summary>
+    /// Aperçu de la phrase qu'une source est en train de dire : un peu estompé, suivi de
+    /// « … », mis à jour sur place et sans fondu tant que la phrase n'est pas finie.
+    /// </summary>
+    internal void ShowDraft(string source, IReadOnlyList<OverlaySpeaker> speakers, string text, string? original)
+    {
+        var line = BuildLine(speakers, text + " …", original);
+        line.Opacity = DraftOpacity;
+        Place(line, TakeDraft(source));
+
+        // Garde-fou : un aperçu dont la phrase finale ne vient jamais ne reste pas affiché.
+        var expiry = new DispatcherTimer { Interval = DraftLifetime };
+        expiry.Tick += (_, _) => ClearDraft(source);
+        expiry.Start();
+        _drafts[source] = (line, expiry);
+    }
+
+    internal void ClearDraft(string source)
+    {
+        if (TakeDraft(source) is { } line)
+        {
+            Lines.Children.Remove(line);
+            UpdatePlaceholder();
+        }
+    }
+
+    internal void ClearDrafts()
+    {
+        foreach (string source in _drafts.Keys.ToList())
+            ClearDraft(source);
+    }
+
+    // L'aperçu affiché pour cette source, retiré du suivi (null si aucun).
+    private Border? TakeDraft(string source)
+    {
+        if (!_drafts.Remove(source, out var draft))
+            return null;
+        draft.Expiry.Stop();
+        return draft.Line;
+    }
+
+    private Border BuildLine(IReadOnlyList<OverlaySpeaker> speakers, string text, string? original) =>
+        SubtitleTheme.Find(_settings.Theme).BuildLine(
+            speakers, text, _settings.ShowOriginal ? original : null, _settings.FontSize, _settings.BackgroundOpacity);
+
+    // À la place de l'ancienne ligne si elle est encore à l'écran (même hauteur dans la pile), sinon en bas.
+    private void Place(Border line, Border? replacing)
+    {
+        int index = replacing is null ? -1 : Lines.Children.IndexOf(replacing);
+        if (index >= 0)
+        {
+            // Le remplacement direct (Children[index] = line) est refusé par WPF : retirer puis insérer.
+            Lines.Children.RemoveAt(index);
+            Lines.Children.Insert(index, line);
+        }
+        else
+        {
+            Lines.Children.Add(line);
+        }
+        while (Lines.Children.Count > _settings.MaxLines)
+            Lines.Children.RemoveAt(0);
+        UpdatePlaceholder();
     }
 
     private void UpdatePlaceholder() =>

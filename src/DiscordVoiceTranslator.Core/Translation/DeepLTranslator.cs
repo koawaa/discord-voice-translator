@@ -36,13 +36,25 @@ public sealed class DeepLTranslator : ITranslator
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("DeepL-Auth-Key", apiKey);
     }
 
-    public async Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, CancellationToken cancellationToken)
+    public async Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, TranslationHints hints, CancellationToken cancellationToken)
     {
         string source = sourceLanguage.ToUpperInvariant();
-        var request = new TranslateRequest([text], targetLanguage, SourceLanguages.Contains(source) ? source : null);
+        // Les termes à garder sont entourés d'une balise que DeepL recopie sans la traduire. Le
+        // mode XML n'est activé que s'il y en a : il oblige à échapper le reste du texte.
+        string? marked = KeepAsIs.Mark(text, hints.KeepAsIs);
+        var request = new TranslateRequest([marked ?? text], targetLanguage, SourceLanguages.Contains(source) ? source : null)
+        {
+            // Le contexte n'est ni traduit ni facturé.
+            Context = string.IsNullOrWhiteSpace(hints.Context) ? null : hints.Context,
+            // « prefer_ » : simplement ignoré pour les langues sans tutoiement, au lieu d'une erreur.
+            Formality = hints.Informal ? "prefer_less" : null,
+            TagHandling = marked is null ? null : "xml",
+            IgnoreTags = marked is null ? null : [KeepAsIs.Tag],
+        };
         var response = await SendAsync(() => _http.PostAsJsonAsync("v2/translate", request, Json, cancellationToken), cancellationToken);
         var body = await response.Content.ReadFromJsonAsync<TranslateResponse>(Json, cancellationToken);
-        return body?.Translations.FirstOrDefault()?.Text ?? throw new TranslationException(T("DeepL returned an empty answer.", "DeepL a renvoyé une réponse vide."));
+        string translated = body?.Translations.FirstOrDefault()?.Text ?? throw new TranslationException(T("DeepL returned an empty answer.", "DeepL a renvoyé une réponse vide."));
+        return marked is null ? translated : KeepAsIs.Unmark(translated);
     }
 
     public async Task<TranslatorUsage?> GetUsageAsync(CancellationToken cancellationToken)
@@ -83,7 +95,13 @@ public sealed class DeepLTranslator : ITranslator
 
     public void Dispose() => _http.Dispose();
 
-    private sealed record TranslateRequest(string[] Text, string TargetLang, string? SourceLang);
+    private sealed record TranslateRequest(string[] Text, string TargetLang, string? SourceLang)
+    {
+        public string? Context { get; init; }
+        public string? Formality { get; init; }
+        public string? TagHandling { get; init; }
+        public string[]? IgnoreTags { get; init; }
+    }
     private sealed record TranslateResponse(Translated[] Translations);
     private sealed record Translated(string Text);
     private sealed record UsageResponse(long CharacterCount, long CharacterLimit);

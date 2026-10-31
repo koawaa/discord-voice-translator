@@ -24,6 +24,9 @@ public interface ITranscriber : IDisposable
     /// </summary>
     Task WarmUpAsync(CancellationToken cancellationToken);
 
+    /// <summary>Mots attendus (pseudos, termes de jeu), du plus au moins important.</summary>
+    void SetVocabulary(IReadOnlyList<string> terms);
+
     /// <summary>Renvoie null si rien d'exploitable n'a été reconnu.</summary>
     Task<TranscriptionResult?> TranscribeAsync(SpeechSegment segment, CancellationToken cancellationToken);
 }

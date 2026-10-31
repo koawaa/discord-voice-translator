@@ -14,6 +14,8 @@
   <ItemGroup>
     <!-- Silero VAD (2 Mo, licence MIT) est livré avec l'appli ; Whisper (834 Mo) est téléchargé au premier lancement. -->
     <Content Include="Models\silero_vad.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Vocabulaire par jeu (GameVocabulary), activé tout seul quand le jeu tourne. -->
+    <Content Include="vocabulary\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -26,7 +26,7 @@ public sealed class FailoverTranslator : ITranslator
 
     private int Current => Volatile.Read(ref _current);
 
-    public async Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, CancellationToken cancellationToken)
+    public async Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, TranslationHints hints, CancellationToken cancellationToken)
     {
         // Chaque clé est essayée au plus une fois par phrase. On reboucle sur les premières :
         // leur quota a pu repartir à zéro avec le nouveau mois.
@@ -35,7 +35,7 @@ public sealed class FailoverTranslator : ITranslator
             int index = Current;
             try
             {
-                return await _translators[index].TranslateAsync(text, sourceLanguage, targetLanguage, cancellationToken);
+                return await _translators[index].TranslateAsync(text, sourceLanguage, targetLanguage, hints, cancellationToken);
             }
             catch (TranslationException ex) when (ex.KeyUnusable && _translators.Count > 1)
             {

@@ -11,6 +11,15 @@ public sealed class TranslationException(string message, Exception? inner = null
 
 public sealed record TranslatorUsage(long CharactersUsed, long CharacterLimit);
 
+/// <summary>Ce qui aide à mieux traduire une phrase, sans être traduit soi-même.</summary>
+/// <param name="Context">Ce qui vient d'être dit : lève les ambiguïtés des phrases courtes (« take him out »).</param>
+/// <param name="Informal">Tutoyer plutôt que vouvoyer, quand la langue cible fait la différence.</param>
+/// <param name="KeepAsIs">Pseudos et termes de jeu à recopier tels quels (« Hunter » ne doit pas devenir « Chasseur »).</param>
+public sealed record TranslationHints(string? Context, bool Informal, IReadOnlyCollection<string> KeepAsIs)
+{
+    public static TranslationHints None { get; } = new(null, false, []);
+}
+
 /// <summary>Fournisseur de traduction : DeepL aujourd'hui, d'autres plus tard.</summary>
 public interface ITranslator : IDisposable
 {
@@ -19,7 +28,7 @@ public interface ITranslator : IDisposable
     /// <param name="sourceLanguage">Code ISO à deux lettres détecté par Whisper.</param>
     /// <param name="targetLanguage">Code du fournisseur, par exemple « FR » ou « EN-US ».</param>
     /// <exception cref="TranslationException">Clé refusée, quota épuisé, service injoignable...</exception>
-    Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, CancellationToken cancellationToken);
+    Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, TranslationHints hints, CancellationToken cancellationToken);
 
     /// <summary>Consommation du forfait, ou null si le fournisseur ne la donne pas.</summary>
     Task<TranslatorUsage?> GetUsageAsync(CancellationToken cancellationToken);

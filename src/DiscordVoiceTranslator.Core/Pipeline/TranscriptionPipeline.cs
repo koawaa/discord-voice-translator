@@ -17,13 +17,27 @@ public sealed class TranscriptionPipeline : IAsyncDisposable
     private readonly Channel<SpeechSegment> _segments =
         Channel.CreateUnbounded<SpeechSegment>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
     private readonly CancellationTokenSource _cts = new();
-    private Task? _vadTask, _transcriptionTask;
+    private readonly SemaphoreSlim _progressSignal = new(0);
+    private SpeechSegment? _latestProgress;
+    private Task? _vadTask, _transcriptionTask, _progressTask;
     private int _pending;
 
     public event Action<long>? SpeechStarted;
     public event Action? SpeechDiscarded;
     public event Action<SpeechSegment>? SegmentQueued;
     public event Action<TranscriptionResult>? Transcribed;
+
+    /// <summary>Aperçu de la phrase en cours (voir <see cref="LiveDrafts"/>).</summary>
+    public event Action<TranscriptionResult>? DraftTranscribed;
+
+    /// <summary>Une prise de parole terminée n'a rien donné : son aperçu éventuel doit disparaître.</summary>
+    public event Action<SpeechSegment>? NothingRecognized;
+
+    /// <summary>
+    /// Transcrire aussi la phrase pendant qu'elle est prononcée, environ chaque seconde. Les
+    /// phrases finies passent toujours avant : aucun aperçu n'est fait tant qu'il y en a une en attente.
+    /// </summary>
+    public volatile bool LiveDrafts;
 
     /// <summary>Un segment a fini d'être traité, qu'il ait donné du texte ou non.</summary>
     public event Action? SegmentProcessed;
@@ -45,12 +59,21 @@ public sealed class TranscriptionPipeline : IAsyncDisposable
             _segments.Writer.TryWrite(segment);
             SegmentQueued?.Invoke(segment);
         };
+        _segmenter.SpeechProgress += segment =>
+        {
+            if (!LiveDrafts)
+                return;
+            // Seul le plus récent compte : un aperçu pas encore traité est remplacé.
+            Interlocked.Exchange(ref _latestProgress, segment);
+            _progressSignal.Release();
+        };
     }
 
     public void Start()
     {
         _vadTask = Task.Run(VadLoop);
         _transcriptionTask = Task.Run(TranscriptionLoop);
+        _progressTask = Task.Run(DraftLoop);
     }
 
     /// <summary>Appelé depuis le thread de capture : copie et rend la main aussitôt.</summary>
@@ -90,7 +113,34 @@ public sealed class TranscriptionPipeline : IAsyncDisposable
                 // Après la décrémentation : les abonnés voient déjà le bon nombre de segments en attente.
                 if (result is not null)
                     Transcribed?.Invoke(result);
+                else
+                    NothingRecognized?.Invoke(segment);
                 SegmentProcessed?.Invoke();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task DraftLoop()
+    {
+        try
+        {
+            while (true)
+            {
+                await _progressSignal.WaitAsync(_cts.Token);
+                var segment = Interlocked.Exchange(ref _latestProgress, null);
+                // Déjà pris par un signal précédent, ou une phrase finie attend : elle passe avant.
+                if (segment is null || !LiveDrafts || PendingSegments > 0)
+                    continue;
+                try
+                {
+                    if (await _transcriber.TranscribeAsync(segment, _cts.Token) is { } result)
+                        DraftTranscribed?.Invoke(result);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Error?.Invoke(ex);
+                }
             }
         }
         catch (OperationCanceledException) { }
@@ -103,6 +153,8 @@ public sealed class TranscriptionPipeline : IAsyncDisposable
         _cts.Cancel();
         if (_vadTask is not null) await _vadTask;
         if (_transcriptionTask is not null) await _transcriptionTask;
+        if (_progressTask is not null) await _progressTask;
         _cts.Dispose();
+        _progressSignal.Dispose();
     }
 }

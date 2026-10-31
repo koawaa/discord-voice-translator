@@ -7,6 +7,7 @@ using DiscordVoiceTranslator.Core.Config;
 using DiscordVoiceTranslator.Core.Discord;
 using DiscordVoiceTranslator.Core.Localization;
 using DiscordVoiceTranslator.Core.Translation;
+using DiscordVoiceTranslator.Core.Updates;
 using static DiscordVoiceTranslator.Core.Localization.UiText;
 
 namespace DiscordVoiceTranslator.App;
@@ -27,6 +28,10 @@ public partial class App : Application
     private TrayIcon? _tray;
     private TranslatorEngine? _engine;
     private DispatcherTimer? _demoTimer;
+    private const int HistoryLimit = 500;
+    private readonly System.Collections.ObjectModel.ObservableCollection<HistoryEntry> _history = [];
+    private HistoryWindow? _historyWindow;
+    private ReplyWindow? _replyWindow;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -66,6 +71,8 @@ public partial class App : Application
         overlay.SettingsRequested += OpenSettings;
         overlay.PauseToggleRequested += TogglePause;
         overlay.GeometryChanged += SaveSettings;
+        overlay.HistoryRequested += OpenHistory;
+        overlay.ReplyRequested += OpenReply;
         overlay.Show();
 
         ListenForRequests(overlay);
@@ -75,6 +82,8 @@ public partial class App : Application
         _tray.VisibilityToggleRequested += overlay.ToggleVisibility;
         _tray.PauseToggleRequested += TogglePause;
         _tray.SettingsRequested += OpenSettings;
+        _tray.HistoryRequested += OpenHistory;
+        _tray.ReplyRequested += OpenReply;
         _tray.QuitRequested += () => Shutdown();
 
         if (e.Args.Contains("--demo"))
@@ -87,8 +96,10 @@ public partial class App : Application
         _engine.StatusChanged += status => Dispatcher.BeginInvoke(() => overlay.SetStatus(status));
         _engine.BusyChanged += busy => Dispatcher.BeginInvoke(() => overlay.SetBusy(busy));
         _engine.LineReady += line => Dispatcher.BeginInvoke(() => ShowLine(overlay, line));
+        _engine.DraftCancelled += source => Dispatcher.BeginInvoke(() => overlay.ClearDraft(source));
         ApplyTranslation(TranslationSettings.LoadDeepLKeys());
         _engine.ConfigureDiscord(DiscordAppCredentials.Load(), _settings.Discord.SpeakerMarginMs);
+        _engine.SetHiddenSpeakers(_settings.Discord.HiddenSpeakers.Select(h => h.Id));
         _engine.ConfigureAudio(_settings.Audio.CaptureDiscord, _settings.Audio.Apps);
 
         // Tout premier lancement : les paramètres expliquent quoi configurer (Discord, DeepL).
@@ -98,6 +109,7 @@ public partial class App : Application
             SaveSettings();
             _ = Dispatcher.BeginInvoke(OpenSettings);
         }
+        _ = CheckForUpdateAsync();
 
         try
         {
@@ -107,6 +119,19 @@ public partial class App : Application
         {
             overlay.SetStatus(T("Could not start: ", "Impossible de démarrer : ") + ex.Message);
         }
+    }
+
+    // Une fois par lancement, un peu après le démarrage pour ne pas le ralentir.
+    private async Task CheckForUpdateAsync()
+    {
+        if (!_settings.CheckForUpdates || typeof(App).Assembly.GetName().Version is not { } current)
+            return;
+        await Task.Delay(TimeSpan.FromSeconds(15));
+        if (await UpdateChecker.FindNewerAsync(current, CancellationToken.None) is not { } update)
+            return;
+        var v = update.Version;
+        _tray?.ShowUpdate($"{v.Major}.{v.Minor}.{Math.Max(v.Build, 0)}",
+            () => Process.Start(new ProcessStartInfo(update.PageUrl) { UseShellExecute = true }));
     }
 
     private bool TryOwnInstance(TimeSpan wait)
@@ -198,6 +223,9 @@ public partial class App : Application
             _engine?.ConfigureDiscord(window.Discord, _settings.Discord.SpeakerMarginMs);
         else
             _engine?.SetSpeakerMargin(_settings.Discord.SpeakerMarginMs);
+        _engine?.RefreshVocabularyNow();
+        _engine?.SetLiveDrafts(_settings.Transcription.LiveSubtitles);
+        _engine?.SetHiddenSpeakers(_settings.Discord.HiddenSpeakers.Select(h => h.Id));
 
         if (window.RestartNeeded)
         {
@@ -221,6 +249,8 @@ public partial class App : Application
         bool paused = !_engine.Paused;
         _engine.SetPaused(paused);
         _overlay?.SetPaused(paused);
+        if (paused)
+            _overlay?.ClearDrafts();
         _tray?.SetPaused(paused);
     }
 
@@ -247,12 +277,13 @@ public partial class App : Application
         if (_engine is null)
             return;
         var target = TargetLanguage.Find(_settings.Translation.TargetLanguage);
+        bool informal = _settings.Translation.Informal;
         if (!_settings.Translation.Enabled)
-            _engine.ConfigureTranslation(null, target, T("Translation off (Settings > General)", "Traduction désactivée (Paramètres > Général)"));
+            _engine.ConfigureTranslation(null, target, informal, T("Translation off (Settings > General)", "Traduction désactivée (Paramètres > Général)"));
         else if (deepLKeys.Count == 0)
-            _engine.ConfigureTranslation(null, target, T("Translation: no DeepL key (Settings > DeepL)", "Traduction : pas de clé DeepL (Paramètres > DeepL)"));
+            _engine.ConfigureTranslation(null, target, informal, T("Translation: no DeepL key (Settings > DeepL)", "Traduction : pas de clé DeepL (Paramètres > DeepL)"));
         else
-            _engine.ConfigureTranslation(new FailoverTranslator("DeepL", deepLKeys.Select(key => (ITranslator)new DeepLTranslator(key)).ToList()), target);
+            _engine.ConfigureTranslation(new FailoverTranslator("DeepL", deepLKeys.Select(key => (ITranslator)new DeepLTranslator(key)).ToList()), target, informal);
     }
 
     private void ShowLine(OverlayWindow overlay, DisplayLine line)
@@ -267,7 +298,62 @@ public partial class App : Application
         // Personne d'identifié (RPC absent, ou voix sans événement Discord) : la langue sert d'étiquette.
         else if (speakers.Count == 0)
             speakers = [new OverlaySpeaker(SpokenLanguages.Name(language), SpeakerColors.For(language), null)];
-        overlay.AddLine(speakers, line.Text, line.Original);
+        if (line.IsDraft)
+        {
+            overlay.ShowDraft(line.Source, speakers, line.Text, line.Original);
+            return;
+        }
+        overlay.AddLine(speakers, line.Text, line.Original, line.Source);
+        // Une seule personne identifiée : elle pourra être masquée depuis l'historique.
+        AddToHistory(speakers, line.Speakers.Count == 1 ? line.Speakers[0].Id : null, line.Text, line.Original);
+    }
+
+    private void AddToHistory(IReadOnlyList<OverlaySpeaker> speakers, string? speakerId, string text, string? original)
+    {
+        _history.Add(new HistoryEntry(DateTime.Now, string.Join(" / ", speakers.Select(s => s.Name)), speakers[0].Color, speakerId, text, original));
+        while (_history.Count > HistoryLimit)
+            _history.RemoveAt(0);
+    }
+
+    private void OpenHistory()
+    {
+        if (_historyWindow is null)
+        {
+            _historyWindow = new HistoryWindow(_history);
+            _historyWindow.HideRequested += HideSpeaker;
+            _historyWindow.Closed += (_, _) => _historyWindow = null;
+            _historyWindow.Show();
+        }
+        if (_historyWindow.WindowState == WindowState.Minimized)
+            _historyWindow.WindowState = WindowState.Normal;
+        _historyWindow.Activate();
+    }
+
+    private void HideSpeaker(HistoryEntry entry)
+    {
+        if (entry.SpeakerId is not string id || _settings.Discord.HiddenSpeakers.Any(h => h.Id == id))
+            return;
+        _settings.Discord.HiddenSpeakers.Add(new HiddenSpeaker(id, entry.Speaker));
+        SaveSettings();
+        _engine?.SetHiddenSpeakers(_settings.Discord.HiddenSpeakers.Select(h => h.Id));
+        _historyWindow?.ShowStatus(T($"{entry.Speaker} is no longer subtitled. To undo: Settings > Discord.",
+                                     $"{entry.Speaker} n'est plus sous-titré·e. Pour annuler : Paramètres > Discord."));
+    }
+
+    private void OpenReply()
+    {
+        if (_replyWindow is null)
+        {
+            // La langue entendue en dernier, sinon une autre que la tienne pour que la traduction serve à quelque chose.
+            var own = TargetLanguage.Find(_settings.Translation.TargetLanguage);
+            var language = _engine?.LastHeardLanguage ?? TargetLanguage.All.First(l => l != own && l.Code.Split('-')[0] != own.Code.Split('-')[0]);
+            _replyWindow = new ReplyWindow(language, (text, target, token) =>
+                _engine?.TranslateReplyAsync(text, target, token)
+                ?? throw new TranslationException(T("The translator is still starting.", "Le traducteur démarre encore.")));
+            _replyWindow.Closed += (_, _) => _replyWindow = null;
+            _replyWindow.Show();
+        }
+        _replyWindow.Activate();
     }
 
     // Un avatar n'est téléchargé qu'une fois par session ; WPF le charge en arrière-plan et
@@ -316,6 +402,7 @@ public partial class App : Application
                 overlay.SetBusy(false);
                 var line = lines[tick / 2 % lines.Length];
                 overlay.AddLine(line.Speakers, line.Text, line.Original);
+                AddToHistory(line.Speakers, line.Speakers.Length == 1 ? "demo-" + line.Speakers[0].Name : null, line.Text, line.Original);
             }
             tick++;
         };

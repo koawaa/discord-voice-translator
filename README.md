@@ -54,6 +54,11 @@ Without this step, subtitles still work, but each line shows the language instea
 - **Ctrl+Alt+F9**: edit mode (drag to move, pull the edges or corners to resize), press again to lock. The overlay snaps to the screen edges and center: hold **Shift** to place it freely, **Ctrl** to resize from the center, **Esc** to cancel. Once locked, your clicks go through to the game.
 - **Ctrl+Alt+F10**: hide or show the subtitles.
 - **Ctrl+Alt+F11**: pause or resume (also in the tray menu and the edit-mode bar). While paused nothing is listened to or translated, so no DeepL characters are used, and the app stays open.
+- **Ctrl+Alt+H**: history of the last lines, to reread what went by too fast (copy, export to a text file, or hide a person: a music bot, a friend who already speaks your language).
+- **Ctrl+Alt+R**: reply in their language. Type in yours, press Enter: the translation is copied, paste it in Discord with Ctrl+V.
+- **Live subtitles** (Settings → Overlay, on by default): on long sentences (over 2–3 seconds), the text appears and is translated while the person is still speaking, then is corrected when they finish. Uses more DeepL characters: turn it off to save quota.
+- **Names and game vocabulary** (Settings → General, on by default): the names of the people in your voice channel and the terms of the game that is running are spelled correctly and never translated. Lists for 52 games ship with the app ([see them](src/DiscordVoiceTranslator.App/vocabulary)): Apex Legends, ARC Raiders, Arma, Baldur's Gate 3, Battlefield, Call of Duty, Counter-Strike 2, Cyberpunk 2077, DARK SOULS III, Dead by Daylight, Deadlock, Destiny 2, Dota 2, ELDEN RING, Escape from Tarkov, FINAL FANTASY XIV Online, Fortnite, Forza, Grand Theft Auto, HELLDIVERS 2, Hollow Knight, Hollow Knight: Silksong, League of Legends, Marvel Rivals, Minecraft, Monster Hunter Wilds, osu!, Overwatch, Palworld, Path of Exile, PEAK, Project Zomboid, PUBG: BATTLEGROUNDS, R.E.P.O., Roblox, Rocket League, Rust, Slay the Spire 2, Squad, Stardew Valley, Team Fortress 2, Terraria, The Last of Us, Tom Clancy's Rainbow Six Siege, Trackmania, Valheim, VALORANT, VRChat, War Thunder, WARDOGS, Warframe, World of Warcraft. To add a game for yourself, put a JSON file in the same format in `%APPDATA%\DiscordVoiceTranslator\vocabulary`; to share it, propose it on GitHub.
+- **Casual tone** (Settings → General): translates with "tu" rather than "vous" (and the like) between players.
 - The app lives in the **notification area**: click the **^** arrow next to the clock, then right-click the blue speech bubble for **Settings** or **Quit**.
 - Works with games in **borderless windowed** mode (not exclusive fullscreen).
 - The interface is in English or French: **Settings → General → Interface language**.
@@ -65,7 +70,9 @@ Without this step, subtitles still work, but each line shows the language instea
 ### Privacy
 
 - No audio is ever recorded or sent anywhere: speech recognition happens on your PC.
+- The subtitle history (Ctrl+Alt+H) stays in memory only and is gone when the app closes, unless you export it.
 - When translation is on, only the recognized **text** is sent to DeepL.
+- At startup the app asks GitHub for the latest version number, to tell you when an update is out (Settings → General to turn it off).
 - Your DeepL key and Discord application are stored **encrypted with your Windows account** in `%APPDATA%\DiscordVoiceTranslator`.
 
 ### Troubleshooting
@@ -91,7 +98,7 @@ Requires the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), then:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.4.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.6.0
 ```
 
 The installer is written to `artifacts\`. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -151,6 +158,11 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 - **Ctrl+Alt+F9** : mode édition (glisser pour déplacer, tirer les bords ou les coins pour redimensionner), puis de nouveau pour verrouiller. L'overlay s'aimante aux bords et au centre de l'écran : **Maj** enfoncée pour le placer librement, **Ctrl** pour redimensionner depuis le centre, **Échap** pour annuler. Une fois verrouillé, tes clics passent au jeu.
 - **Ctrl+Alt+F10** : masquer ou afficher les sous-titres.
 - **Ctrl+Alt+F11** : mettre en pause ou reprendre (aussi dans le menu de l'icône et la barre du mode édition). En pause, rien n'est écouté ni traduit, donc aucun caractère DeepL n'est consommé, et l'appli reste ouverte.
+- **Ctrl+Alt+H** : historique des dernières lignes, pour relire ce qui est passé trop vite (copier, exporter en fichier texte, ou masquer une personne : un bot musique, un ami qui parle déjà ta langue).
+- **Ctrl+Alt+R** : répondre dans leur langue. Tape dans la tienne, appuie sur Entrée : la traduction est copiée, colle-la dans Discord avec Ctrl+V.
+- **Sous-titres en direct** (Paramètres → Overlay, activés par défaut) : sur les phrases longues (plus de 2 à 3 secondes), le texte s'affiche et se traduit pendant que la personne parle encore, puis se corrige quand elle a fini. Consomme plus de caractères DeepL : désactive-les pour économiser le quota.
+- **Pseudos et vocabulaire du jeu** (Paramètres → Général, activé par défaut) : les pseudos des gens de ton salon vocal et les termes du jeu en cours sont écrits correctement et jamais traduits. Des listes pour 52 jeux sont fournies avec l'appli ([les voir](src/DiscordVoiceTranslator.App/vocabulary)) : Apex Legends, ARC Raiders, Arma, Baldur's Gate 3, Battlefield, Call of Duty, Counter-Strike 2, Cyberpunk 2077, DARK SOULS III, Dead by Daylight, Deadlock, Destiny 2, Dota 2, ELDEN RING, Escape from Tarkov, FINAL FANTASY XIV Online, Fortnite, Forza, Grand Theft Auto, HELLDIVERS 2, Hollow Knight, Hollow Knight: Silksong, League of Legends, Marvel Rivals, Minecraft, Monster Hunter Wilds, osu!, Overwatch, Palworld, Path of Exile, PEAK, Project Zomboid, PUBG: BATTLEGROUNDS, R.E.P.O., Roblox, Rocket League, Rust, Slay the Spire 2, Squad, Stardew Valley, Team Fortress 2, Terraria, The Last of Us, Tom Clancy's Rainbow Six Siege, Trackmania, Valheim, VALORANT, VRChat, War Thunder, WARDOGS, Warframe, World of Warcraft. Pour ajouter un jeu pour toi, dépose un fichier JSON au même format dans `%APPDATA%\DiscordVoiceTranslator\vocabulary` ; pour le partager, propose-le sur GitHub.
+- **Ton familier** (Paramètres → Général) : traduit avec « tu » plutôt que « vous » entre joueurs.
 - L'appli vit dans la **zone de notification** : clique sur la flèche **^** près de l'horloge, puis clic droit sur la bulle bleue pour les **Paramètres** ou **Quitter**.
 - Marche avec les jeux en **fenêtré sans bordure** (pas en plein écran exclusif).
 - **Paramètres → Audio** : sous-titrer Discord, et ajouter des jeux ou d'autres applis ouvertes (lance d'abord le jeu pour qu'il apparaisse dans la liste). Leurs lignes portent le nom de l'appli et la langue. Tout le son d'un jeu est écouté : des chansons avec paroles peuvent donner de fausses lignes.
@@ -161,7 +173,9 @@ Sans cette étape, les sous-titres marchent quand même, mais chaque ligne affic
 ### Confidentialité
 
 - Aucun son n'est enregistré ni envoyé nulle part : la reconnaissance vocale se fait sur ton PC.
+- L'historique des sous-titres (Ctrl+Alt+H) reste en mémoire et disparaît à la fermeture de l'appli, sauf si tu l'exportes.
 - Quand la traduction est active, seul le **texte** reconnu est envoyé à DeepL.
+- Au démarrage, l'appli demande à GitHub le numéro de la dernière version, pour te prévenir d'une mise à jour (désactivable dans Paramètres → Général).
 - Ta clé DeepL et ton application Discord sont enregistrées **chiffrées avec ton compte Windows** dans `%APPDATA%\DiscordVoiceTranslator`.
 
 ### Dépannage
@@ -187,7 +201,7 @@ Il faut le SDK .NET 8 et [Inno Setup 6](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`), puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.4.0
+powershell -ExecutionPolicy Bypass -File build\release.ps1 -Version 1.6.0
 ```
 
 L'installateur est écrit dans `artifacts\`. Voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)

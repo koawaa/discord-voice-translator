@@ -71,6 +71,10 @@ public static class ProcessLocator
         return apps.Values.OrderBy(a => a.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
+    /// <summary>Noms des exécutables en cours (« cs2.exe »...), en un seul appel rapide.</summary>
+    public static HashSet<string> RunningExeNames() =>
+        Snapshot().Select(e => e.ExeName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     private readonly record struct Entry(uint Pid, uint ParentPid, string ExeName);
 
     // Toolhelp donne PID, PID parent et nom de tous les processus en un seul appel,

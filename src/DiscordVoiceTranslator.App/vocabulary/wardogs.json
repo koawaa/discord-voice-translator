@@ -1,0 +1,19 @@
+{
+  "game": "WARDOGS",
+  "exe": ["WardogsClient-Win64-Shipping.exe", "WardogsClient.exe"],
+  "terms": [
+    "M4", "AK74", "AK", "FOB", "Control Zone", "Humvee", "RPG-7", "RPG",
+    "AMP-9", "Galil", "FAL", "M249 SAW", "M249", "PKM", "L2A6", "Little Bird",
+    "Ural", "Medic", "Recon", "Support", "Assault", "Driver", "loadout", "revive",
+    "respawn", "AP", "Deagle", "MP5", "SKS", "SVD", "MAAWS", "MGL-40", "AMR 50",
+    "MK22", "SV98", "Mosin Nagant", "Bushmaster M17S", "T-21", "A-91", "KH-2002",
+    "PP-19 Vityaz", "Super-45", "BMR-308", "Scout Rifle TD", "M500", "MP43",
+    "GGX 17", "GGX 18", "M1911", "Judge", "Compound Bow", "TCX-SPR", "PP-19 Bizon",
+    "Evo-3 Ultra", "M14", "T-72B3", "Flakpanzer Gepard", "Gepard", "Wolf-110",
+    "Z20 Lakota", "Lakota", "SPH-2", "Kodiak", "Ural Defender", "Dune Buggy",
+    "Bobcat", "M2 Browning", "MG Nest", "Range Finder", "Infrared Range Finder",
+    "Field Resuscitator", "Medical Bag", "Adrenaline Pen", "Remote Detonator",
+    "Build Supplies", "Forward Operating Base", "Molotov"
+  ],
+  "notes": "WardogsClient-Win64-Shipping.exe est attesté dans les fichiers distribués ; WardogsClient.exe apparaît dans une configuration de lancement de développement/playtest et peut être absent de la version publique. Fréquence des termes estimée, sans corpus vocal ; aucun callout géographique non vérifié ajouté. Sources : [Steam](https://store.steampowered.com/app/1867240/WARDOGS/), [configuration SteamDB](https://steamdb.info/app/1867240/config/), [fichiers SteamDB](https://steamdb.info/depot/1867241/), [annonces officielles](https://steamcommunity.com/app/1867240/homecontent/-Official), [catalogue communautaire](https://wardogscalculator.com/)."
+}

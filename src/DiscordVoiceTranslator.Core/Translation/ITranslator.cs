@@ -3,16 +3,23 @@ using static DiscordVoiceTranslator.Core.Localization.UiText;
 namespace DiscordVoiceTranslator.Core.Translation;
 
 /// <summary>Erreur de traduction avec un message lisible tel quel par l'utilisateur.</summary>
-public sealed class TranslationException(string message, Exception? inner = null, bool keyUnusable = false) : Exception(message, inner)
+public sealed class TranslationException(string message, Exception? inner = null, bool keyUnusable = false, bool retryable = false) : Exception(message, inner)
 {
     /// <summary>Clé refusée ou quota épuisé : une autre clé peut prendre le relais.</summary>
     public bool KeyUnusable { get; } = keyUnusable;
+
+    /// <summary>Refus passager (trop de requêtes, service surchargé) : la même requête passera un peu plus tard.</summary>
+    public bool Retryable { get; } = retryable;
 }
 
 public sealed record TranslatorUsage(long CharactersUsed, long CharacterLimit);
 
 /// <summary>Ce qui aide à mieux traduire une phrase, sans être traduit soi-même.</summary>
-/// <param name="Context">Ce qui vient d'être dit : lève les ambiguïtés des phrases courtes (« take him out »).</param>
+/// <param name="Context">
+/// Début de la même phrase, quand elle a été coupée parce que trop longue. Jamais la phrase
+/// d'une autre prise de parole : mesuré, DeepL s'en sert alors pour réinterpréter la phrase
+/// (« bajo de vida » → « low on energy », « placas » → « rounds »).
+/// </param>
 /// <param name="Informal">Tutoyer plutôt que vouvoyer, quand la langue cible fait la différence.</param>
 /// <param name="KeepAsIs">Pseudos et termes de jeu à recopier tels quels (« Hunter » ne doit pas devenir « Chasseur »).</param>
 public sealed record TranslationHints(string? Context, bool Informal, IReadOnlyCollection<string> KeepAsIs)

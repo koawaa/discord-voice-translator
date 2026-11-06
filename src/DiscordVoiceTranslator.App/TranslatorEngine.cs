@@ -41,8 +41,11 @@ internal sealed class TranslatorEngine : IAsyncDisposable
 
     private sealed record TranslationConfig(ITranslator? Translator, TargetLanguage Target, bool Informal, string? DisabledReason);
 
-    // Au-delà, la phrase précédente parle sans doute d'autre chose : elle égarerait la traduction.
-    private static readonly long ContextMaxAge = TimeSpan.FromSeconds(20).Ticks;
+    // La suite d'une phrase coupée (longueur ou respiration) reprend aussitôt : au plus tard ici.
+    private static readonly long ContinuationMaxGap = TimeSpan.FromSeconds(1).Ticks;
+
+    // Trop de requêtes DeepL d'affilée : la phrase finie est retentée, jamais affichée non traduite pour si peu.
+    private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(1500)];
 
     // Assez souvent pour suivre un jeu lancé ou quelqu'un qui rejoint le salon, sans peser.
     private static readonly TimeSpan VocabularyRefresh = TimeSpan.FromSeconds(10);
@@ -60,10 +63,13 @@ internal sealed class TranslatorEngine : IAsyncDisposable
         public volatile bool Speaking;
         public volatile string Status = "";
 
-        // Dernière phrase reconnue (langue d'origine), donnée comme contexte à la suivante.
-        // Écrite seulement par la boucle de traduction.
+        // Dernière phrase reconnue (langue d'origine), si elle a pu être coupée en pleine phrase
+        // (longueur, respiration) et qui parlait : seule sa suite directe la reçoit comme
+        // contexte. Écrites seulement par la boucle de traduction.
         public volatile string? LastText;
         public long LastTextEndQpc;
+        public volatile bool LastMayContinue;
+        public volatile string LastSpeakers = "";
 
         // Aperçus : seul le plus récent attend, traduit par un seul travail à la fois. Un aperçu
         // dont la phrase finale est déjà partie (numéro ≤ LastFinalUtterance) est jeté.
@@ -434,28 +440,37 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                     LastHeardLanguage = TargetLanguage.All.FirstOrDefault(l => l.Matches(result.Language)) ?? LastHeardLanguage;
                 string text = result.Text;
                 string? original = null;
-                // Contexte : la phrase d'avant sur la même source (une question, puis sa réponse).
-                string? context = channel.LastText is not null && result.Segment.SpeechStartQpc - channel.LastTextEndQpc < ContextMaxAge
-                    ? channel.LastText
-                    : null;
+                var speakers = Speakers(channel, result);
+                string? context = ContinuationContext(channel, result.Segment, speakers);
                 channel.LastText = result.Text;
                 channel.LastTextEndQpc = result.Segment.SpeechEndQpc;
+                channel.LastMayContinue = result.Segment.CutAtMaxLength || result.Segment.EndedOnShortPause;
+                channel.LastSpeakers = SpeakerKey(speakers);
                 if (config.Translator is not null && !config.Target.Matches(result.Language))
                 {
                     var stopwatch = Stopwatch.StartNew();
                     string nameBefore = config.Translator.Name;
-                    try
+                    var hints = new TranslationHints(context, config.Informal, Volatile.Read(ref _keepAsIs));
+                    for (int attempt = 0; ; attempt++)
                     {
-                        var hints = new TranslationHints(context, config.Informal, Volatile.Read(ref _keepAsIs));
-                        text = await config.Translator.TranslateAsync(result.Text, result.Language, config.Target.Code, hints, _cts.Token);
-                        original = result.Text;
-                        _lastTranslationMs = stopwatch.Elapsed.TotalMilliseconds;
-                        UpdateTranslationStatus();
-                    }
-                    catch (TranslationException ex)
-                    {
-                        // On affiche quand même le texte d'origine plutôt que de perdre la phrase.
-                        UpdateTranslationStatus(ex.Message);
+                        try
+                        {
+                            text = await config.Translator.TranslateAsync(result.Text, result.Language, config.Target.Code, hints, _cts.Token);
+                            original = result.Text;
+                            _lastTranslationMs = stopwatch.Elapsed.TotalMilliseconds;
+                            UpdateTranslationStatus();
+                            break;
+                        }
+                        catch (TranslationException ex) when (ex.Retryable && attempt < RetryDelays.Length)
+                        {
+                            await Task.Delay(RetryDelays[attempt], _cts.Token);
+                        }
+                        catch (TranslationException ex)
+                        {
+                            // On affiche quand même le texte d'origine plutôt que de perdre la phrase.
+                            UpdateTranslationStatus(ex.Message);
+                            break;
+                        }
                     }
                     // Passé à une autre clé : le quota affiché était celui de l'ancienne.
                     if (config.Translator.Name != nameBefore)
@@ -464,7 +479,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                 Interlocked.Decrement(ref _translating);
 
                 RecordLatency(QpcClock.ToMilliseconds(QpcClock.Now100ns - result.Segment.SpeechEndQpc));
-                LineReady?.Invoke(new DisplayLine(result, Speakers(channel, result), text, original, channel.IsDiscord ? null : channel.Name, channel.Name));
+                LineReady?.Invoke(new DisplayLine(result, speakers, text, original, channel.IsDiscord ? null : channel.Name, channel.Name));
                 RaiseBusy();
 
                 if (config.Translator is not null && ++_linesSinceUsage >= 10)
@@ -473,6 +488,25 @@ internal sealed class TranslatorEngine : IAsyncDisposable
         }
         catch (OperationCanceledException) { }
     }
+
+    /// <summary>
+    /// Contexte DeepL : le début de la phrase, seulement si celle-ci en est la suite directe
+    /// (morceau précédent coupé pour longueur ou sur une respiration, même personne, reprise
+    /// aussitôt). La phrase d'avant dans le salon vient souvent de quelqu'un d'autre et parle
+    /// d'autre chose : mesuré sur 22 phrases, DeepL s'en servait pour réinterpréter la nouvelle
+    /// et la traduisait moins bien (« placas » → « rounds », « bajo de vida » → « low on energy »).
+    /// </summary>
+    private static string? ContinuationContext(AudioChannel channel, SpeechSegment segment, IReadOnlyList<VoiceMember> speakers)
+    {
+        if (!channel.LastMayContinue || channel.LastText is not { } previous || segment.SpeechStartQpc - channel.LastTextEndQpc >= ContinuationMaxGap)
+            return null;
+        // Pseudos connus des deux côtés et différents : quelqu'un d'autre a pris la parole.
+        string now = SpeakerKey(speakers), before = channel.LastSpeakers;
+        return now.Length > 0 && before.Length > 0 && now != before ? null : previous;
+    }
+
+    private static string SpeakerKey(IReadOnlyList<VoiceMember> speakers) =>
+        string.Join(",", speakers.Select(s => s.Id).Order());
 
     // La parole seule (sans le pré-buffer), pour ne pas compter quelqu'un qui finissait juste avant.
     // Les pseudos ne valent que pour Discord : la voix d'un jeu n'y figure pas.
@@ -509,13 +543,14 @@ internal sealed class TranslatorEngine : IAsyncDisposable
                 continue;
 
             var config = Volatile.Read(ref _translation);
+            var speakers = Speakers(channel, draft);
             string text = draft.Text;
             string? original = null;
             if (config.Translator is not null && !config.Target.Matches(draft.Language))
             {
                 try
                 {
-                    var hints = new TranslationHints(channel.LastText, config.Informal, Volatile.Read(ref _keepAsIs));
+                    var hints = new TranslationHints(ContinuationContext(channel, draft.Segment, speakers), config.Informal, Volatile.Read(ref _keepAsIs));
                     text = await config.Translator.TranslateAsync(draft.Text, draft.Language, config.Target.Code, hints, _cts.Token);
                     original = draft.Text;
                 }
@@ -532,7 +567,7 @@ internal sealed class TranslatorEngine : IAsyncDisposable
             lock (channel.DraftLock)
             {
                 if (!IsStale(channel, draft))
-                    LineReady?.Invoke(new DisplayLine(draft, Speakers(channel, draft), text, original,
+                    LineReady?.Invoke(new DisplayLine(draft, speakers, text, original,
                         channel.IsDiscord ? null : channel.Name, channel.Name, IsDraft: true));
             }
         }

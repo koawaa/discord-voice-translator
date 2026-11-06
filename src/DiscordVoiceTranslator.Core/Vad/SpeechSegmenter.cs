@@ -50,6 +50,10 @@ public sealed record VadOptions
 /// Numéro de la prise de parole : ses aperçus et sa version finale ont le même. Une phrase
 /// coupée pour longueur continue sous un nouveau numéro.
 /// </param>
+/// <param name="EndedOnShortPause">
+/// Terminée sur une simple respiration après une longue parole : la personne enchaîne
+/// peut-être la même phrase (comme après <paramref name="CutAtMaxLength"/>).
+/// </param>
 public sealed record SpeechSegment(
     float[] Samples,
     long StartQpc,
@@ -57,7 +61,8 @@ public sealed record SpeechSegment(
     long SpeechEndQpc,
     long ClosedQpc,
     bool CutAtMaxLength,
-    long UtteranceId = 0)
+    long UtteranceId = 0,
+    bool EndedOnShortPause = false)
 {
     public TimeSpan Duration => TimeSpan.FromSeconds(Samples.Length / (double)SileroVad.SampleRate);
 }
@@ -182,7 +187,7 @@ public sealed class SpeechSegmenter
 
         int silenceNeeded = _segment.Count >= _softMaxSegmentSamples ? _shortSilenceSamples : _minSilenceSamples;
         if (_silenceSamples >= silenceNeeded)
-            Close(endQpc);
+            Close(endQpc, shortPause: silenceNeeded < _minSilenceSamples);
         else if (_segment.Count >= _maxSegmentSamples)
             CutAtQuietestPoint();
         else
@@ -236,14 +241,15 @@ public sealed class SpeechSegmenter
     }
 
     /// <summary>Fin de la prise de parole (assez de silence) : envoyée, ou jetée si trop courte.</summary>
-    private void Close(long endQpc)
+    /// <param name="shortPause">Fermée sur une simple respiration après une longue parole (voir <see cref="VadOptions.SoftMaxSegmentMs"/>).</param>
+    private void Close(long endQpc, bool shortPause)
     {
         int keep = Math.Min(_segment.Count, _lastSpeechIndex + _tailPadSamples);
         if (_lastSpeechQpc - _firstSpeechQpc >= _minSpeech100ns)
         {
             var samples = _segment.GetRange(0, keep).ToArray();
             SegmentReady?.Invoke(new SpeechSegment(samples, _segmentStartQpc, _firstSpeechQpc,
-                _lastSpeechQpc, QpcClock.Now100ns, CutAtMaxLength: false, _utteranceId));
+                _lastSpeechQpc, QpcClock.Now100ns, CutAtMaxLength: false, _utteranceId, EndedOnShortPause: shortPause));
         }
         else
         {

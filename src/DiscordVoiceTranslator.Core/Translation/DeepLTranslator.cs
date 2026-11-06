@@ -90,7 +90,9 @@ public sealed class DeepLTranslator : ITranslator
             456 => T("DeepL monthly quota used up.", "Quota DeepL du mois épuisé."),
             (int)HttpStatusCode.TooManyRequests => T("Too many DeepL requests, try again in a moment.", "Trop de requêtes DeepL, réessaie dans un instant."),
             int code => T($"DeepL answered with error {code}.", $"DeepL a répondu par une erreur {code}."),
-        }, keyUnusable: status is (int)HttpStatusCode.Forbidden or 456);
+        }, keyUnusable: status is (int)HttpStatusCode.Forbidden or 456,
+           // 429 : trop de requêtes d'affilée (aperçus + phrases finies) ; 503/529 : DeepL surchargé.
+           retryable: status is (int)HttpStatusCode.TooManyRequests or (int)HttpStatusCode.ServiceUnavailable or 529);
     }
 
     public void Dispose() => _http.Dispose();
